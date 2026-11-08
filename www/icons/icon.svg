@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="35%" r="75%"><stop offset="0" stop-color="#c9f5a8"/><stop offset=".55" stop-color="#7cc861"/><stop offset="1" stop-color="#3f7d4a"/></radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <path d="M60 470 Q180 360 256 380 T460 300" stroke="#dcbc85" stroke-width="56" fill="none" stroke-linecap="round"/>
+  <g transform="translate(256 230)">
+    <circle r="150" fill="#e7b53b"/><circle r="150" fill="none" stroke="#b8861d" stroke-width="14"/>
+    <circle cx="-40" cy="-50" r="60" fill="#f6d77a"/>
+  </g>
+  <text x="256" y="300" font-size="210" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji">🌻</text>
+  <text x="400" y="460" font-size="110" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji">🐛</text>
+</svg>

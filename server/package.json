@@ -1,0 +1,7 @@
+{
+  "name": "potager-gardien-gaia-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node gaia-proxy.mjs" },
+  "dependencies": { "@anthropic-ai/sdk": "latest" }
+}

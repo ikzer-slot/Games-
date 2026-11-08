@@ -1,0 +1,22 @@
+{
+  "name": "potager-gardien",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Jeu mobile : farming + tower defense + gestion, avec un Essaim IA évolutionnaire et l'assistante Gaïa.",
+  "scripts": {
+    "dev": "npx --yes serve www -l 8080",
+    "cap:add:android": "npx cap add android",
+    "cap:add:ios": "npx cap add ios",
+    "cap:sync": "npx cap sync",
+    "cap:android": "npx cap sync android && npx cap open android",
+    "cap:ios": "npx cap sync ios && npx cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0"
+  }
+}

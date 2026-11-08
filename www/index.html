@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#5d9c52">
+<meta name="description" content="Potager Gardien : cultive, défends et gère ta ferme contre un Essaim de nuisibles qui apprend de toi.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Potager Gardien</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="row">
+      <span class="pill" id="coins">🪙 0</span>
+      <span class="pill" id="hearts">❤️ 20</span>
+      <span class="pill" id="rep">⭐ 0</span>
+      <span class="spacer"></span>
+      <button id="gaiaAvatar" aria-label="Demander conseil à Gaïa">🌱</button>
+      <button class="icon" id="btnSpeed" aria-label="Vitesse">x1</button>
+      <button class="icon" id="btnPause" aria-label="Pause">⏸</button>
+      <button class="icon" id="btnMenu" aria-label="Menu">⚙️</button>
+    </div>
+    <div class="row phase">
+      <span id="phaseLabel">☀️ Jour 1</span>
+      <div class="bar"><div id="phaseBar"></div></div>
+      <span id="phaseInfo"></span>
+      <button id="btnNight" aria-label="Lancer la nuit">🌙 Nuit</button>
+    </div>
+    <div class="row stock" id="stock"></div>
+  </header>
+
+  <main id="stage">
+    <canvas id="cv"></canvas>
+    <div id="gaiaBubble" hidden></div>
+    <div id="toasts"></div>
+  </main>
+
+  <footer id="dock">
+    <div id="tools"></div>
+    <nav id="tabs">
+      <button data-tab="farm" class="on">🌱<span>Planter</span></button>
+      <button data-tab="defend">🛡️<span>Défendre</span></button>
+      <button data-tab="manage">🏪<span>Gérer</span><b id="manageBadge" hidden></b></button>
+    </nav>
+  </footer>
+
+  <div id="modal" hidden>
+    <div class="sheet">
+      <header><h2 id="modalTitle"></h2><button class="icon" id="modalClose" aria-label="Fermer">✕</button></header>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <section id="menu" class="screen">
+    <div class="floaties" aria-hidden="true"><span>🥕</span><span>🌻</span><span>🐛</span><span>🎃</span><span>🐝</span><span>🌶️</span><span>🐀</span><span>🤖</span></div>
+    <div class="title">
+      <div class="logo">🌻</div>
+      <h1>Potager<br><em>Gardien</em></h1>
+      <p class="tag">Cultive le jour. Défends la nuit.<br>Un Essaim qui <b>apprend</b> de toi.</p>
+    </div>
+    <div class="menu-buttons">
+      <button class="big" id="btnContinue" hidden>▶ Continuer</button>
+      <button class="big" id="btnNew">🌱 Nouvelle partie</button>
+      <button class="ghost" id="btnHow">📖 Comment jouer</button>
+      <button class="ghost" id="btnSettings">⚙️ Réglages</button>
+    </div>
+    <p class="best" id="bestLabel"></p>
+  </section>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

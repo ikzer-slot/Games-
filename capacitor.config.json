@@ -1,0 +1,8 @@
+{
+  "appId": "com.potagergardien.game",
+  "appName": "Potager Gardien",
+  "webDir": "www",
+  "backgroundColor": "#5d9c52",
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "never" }
+}

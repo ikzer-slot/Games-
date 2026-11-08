@@ -1,0 +1,18 @@
+{
+  "name": "Potager Gardien",
+  "short_name": "Potager Gardien",
+  "description": "Cultive le jour, défends la nuit : farming, tower defense et gestion face à un Essaim qui apprend.",
+  "lang": "fr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#5d9c52",
+  "theme_color": "#5d9c52",
+  "categories": ["games", "strategy"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
