@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Fils",
+    "slug": "fils",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.fils.prototype"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0E0D12",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "app.fils.prototype"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "fils",
+    "backgroundColor": "#0E0D12",
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
