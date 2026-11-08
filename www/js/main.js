@@ -42,8 +42,12 @@ ui.onRestart = () => start(false);
 ui.onQuit = () => { if (game.s && game.s.phase !== 'over') game.save(); showMenu(); };
 
 $('btnNew').addEventListener('click', () => {
-  if (game.hasSave() && !confirm('Commencer une nouvelle partie ? La sauvegarde actuelle sera remplacée.')) return;
-  start(false);
+  if (!game.hasSave()) return start(false);
+  ui.openModal('Nouvelle partie ?', `<p>La sauvegarde actuelle (en cours) sera remplacée.</p>
+    <div class="btns"><button class="btn red" id="cfmNo">Annuler</button><button class="btn alt" id="cfmYes">Recommencer</button></div>`, (b) => {
+    b.querySelector('#cfmNo').onclick = () => ui.closeModal();
+    b.querySelector('#cfmYes').onclick = () => { ui.closeModal(); start(false); };
+  });
 });
 $('btnContinue').addEventListener('click', () => start(true));
 $('btnHow').addEventListener('click', () => ui.howPanel());

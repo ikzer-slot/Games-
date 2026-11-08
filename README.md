@@ -61,6 +61,13 @@ server/gaia-proxy.mjs  ← proxy Claude optionnel pour Gaïa
 capacitor.config.json  ← empaquetage natif Android / iOS
 ```
 
+## 📦 Version en un seul fichier
+
+```bash
+python3 tools/build-single.py dist/potager-gardien.html
+```
+Génère un fichier HTML autonome : il suffit de l'ouvrir dans un navigateur ou de l'héberger n'importe où.
+
 ## ▶️ Lancer en local
 
 ```bash
