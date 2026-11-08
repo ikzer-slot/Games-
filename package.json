@@ -1,15 +1,16 @@
 {
-  "name": "potager-gardien",
+  "name": "miel-et-dards",
   "version": "1.0.0",
   "private": true,
-  "description": "Jeu mobile : farming + tower defense + gestion, avec un Essaim IA évolutionnaire et l'assistante Gaïa.",
+  "description": "Jeu mobile : ruche, fleurs, gestion de colonie et défense face à un Frelon chef qui apprend (IA).",
   "scripts": {
     "dev": "npx --yes serve www -l 8080",
     "cap:add:android": "npx cap add android",
     "cap:add:ios": "npx cap add ios",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap sync android && npx cap open android",
-    "cap:ios": "npx cap sync ios && npx cap open ios"
+    "cap:ios": "npx cap sync ios && npx cap open ios",
+    "build:single": "python3 tools/build-single.py dist/miel-et-dards.html"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0"

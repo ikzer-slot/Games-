@@ -1,949 +1,736 @@
-// Cœur du jeu : état, simulation (ferme, défense, gestion, IA) et rendu canvas.
-import { COLS, ROWS, CROPS, TOWERS, ENEMIES, ITEMS, ITEM_KEYS, UPGRADE_MULT, VILLAGERS, MARKET_EVENTS } from './data.js';
-import { generateMap, neighbors } from './map.js';
-import { Swarm } from './swarm.js';
+// Miel & Dards — simulation et rendu.
+import { RADIUS, FLOWERS, DEFENSES, ENEMIES, COLONY, UPGRADE, SECTORS, hiveMaxBees, hiveMaxHp, hiveCap, hiveUpgradeCost } from './data.js';
+import { DIRS, key, hexDist, toWorld, fromWorld, ring, sectorOf, sectorAngle } from './hex.js';
+import { HornetChief, planColony } from './ai.js';
 import { sfx } from './audio.js';
 
-const SAVE_KEY = 'potager-gardien-save-v1';
-const BEST_KEY = 'potager-gardien-best';
-const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
+const SAVE_KEY = 'miel-et-dards-save-v1';
+const BEST_KEY = 'miel-et-dards-best';
+const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 const rand = (a, b) => a + Math.random() * (b - a);
-const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const HEXR = 0.5773503; // rayon d'un hexagone en unités monde
 
-// ---------- Cache d'emojis pré-rendus (performances mobiles) ----------
-const emojiCache = new Map();
-function emojiSprite(e, px, dpr) {
+const sprites = new Map();
+function emoji(e, px, dpr) {
   px = Math.max(6, Math.round(px));
-  const key = e + '|' + px + '|' + dpr;
-  let cv = emojiCache.get(key);
-  if (!cv) {
+  const k = e + px + '|' + dpr;
+  let c = sprites.get(k);
+  if (!c) {
     const S = Math.ceil(px * 1.4 * dpr);
-    cv = document.createElement('canvas');
-    cv.width = cv.height = S;
-    const c = cv.getContext('2d');
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.font = `${px * dpr}px ${EMOJI_FONT}`;
-    c.fillText(e, S / 2, S / 2 + px * dpr * 0.06);
-    cv.logical = S / dpr;
-    emojiCache.set(key, cv);
-    if (emojiCache.size > 600) emojiCache.delete(emojiCache.keys().next().value);
+    c = document.createElement('canvas'); c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `${px * dpr}px ${EMOJI_FONT}`;
+    g.fillText(e, S / 2, S / 2 + px * dpr * 0.06);
+    c.L = S / dpr; sprites.set(k, c);
+    if (sprites.size > 500) sprites.delete(sprites.keys().next().value);
   }
-  return cv;
+  return c;
 }
 
 export class Game {
-  constructor(canvas, settings) {
-    this.cv = canvas;
-    this.ctx = canvas.getContext('2d');
-    this.settings = settings;
-    this.listeners = {};
-    this.tool = null;
-    this.speed = 1;
-    this.paused = false;
-    this.selected = null;
-    this.time = 0;
-    this.nightAlpha = 0;
-    this.lastTip = null;
+  constructor(canvas) {
+    this.cv = canvas; this.ctx = canvas.getContext('2d');
+    this.listeners = {}; this.tool = null; this.speed = 1; this.paused = false;
+    this.time = 0; this.selected = null;
     this.resetRuntime();
     this.bindInput();
   }
-
-  // ---------- Événements ----------
-  on(name, fn) { (this.listeners[name] ||= []).push(fn); }
-  emit(name, ...a) { (this.listeners[name] || []).forEach(f => f(...a)); }
-  toast(msg) { this.emit('toast', msg); }
+  on(n, f) { (this.listeners[n] ||= []).push(f); }
+  emit(n, ...a) { (this.listeners[n] || []).forEach(f => f(...a)); }
+  toast(m) { this.emit('toast', m); }
 
   resetRuntime() {
-    this.enemies = []; this.projectiles = []; this.particles = []; this.floaters = [];
-    this.spawnQueue = []; this.spawnTimer = 0;
+    this.enemies = []; this.foragers = []; this.guards = []; this.shots = [];
+    this.particles = []; this.floaters = []; this.queue = []; this.spawnT = 0; this.syncT = 0; this.queenT = 0;
   }
 
-  // ---------- Nouvelle partie / chargement ----------
+  // ---------- Partie ----------
   newGame() {
-    const { grid, path } = generateMap();
+    const tiles = [];
+    for (let q = -RADIUS; q <= RADIUS; q++) for (let r = -RADIUS; r <= RADIUS; r++) {
+      if (hexDist(q, r) > RADIUS) continue;
+      tiles.push({ q, r, t: q === 0 && r === 0 ? 'hive' : 'g', flower: null, def: null });
+    }
     this.s = {
-      coins: 70, hearts: 20, maxHearts: 20, rep: 0, day: 1, phase: 'day', dayTime: 0, dayLen: 80,
-      grid, path, stock: { carrot: 0, seed: 24, pepper: 4, pumpkin: 2 }, capLvl: 0,
-      market: { mult: { carrot: 1, seed: 1, pepper: 1, pumpkin: 1 }, event: null },
-      orders: [], robots: [], autoReplant: true,
-      stats: { kills: 0, harvest: 0, earned: 0, eaten: 0 }, tutorial: 0, nextOrderId: 1,
+      tiles, honey: 70, pollen: 12, bees: 12, hiveLvl: 1, hiveHp: hiveMaxHp(1),
+      wave: 0, phase: 'build', timer: 60, warn: null,
+      alloc: { f: 0.55, g: 0.25, n: 0.2 }, target: { f: 0.55, g: 0.25, n: 0.2 }, auto: false, queenWhy: '',
+      stats: { kills: 0, honey: 0, born: 0, lost: 0 }, tutorial: 0,
     };
-    this.swarm = new Swarm();
-    this.resetRuntime();
-    this.seedStartingCrops();
-    this.buildTerrain();
-    this.startDay(true);
+    this.chief = new HornetChief();
+    this.indexTiles();
+    // Rochers et mares aléatoires (sans couper l'accès à la ruche)
+    const cand = this.s.tiles.filter(t => { const d = hexDist(t.q, t.r); return d >= 2 && d <= 3; });
+    for (let i = 0; i < 6; i++) { const t = pick(cand); if (t.t === 'g') t.t = i < 4 ? 'rock' : 'water'; }
+    this.computeFlow();
+    if (!this.edgesReachable()) return this.newGame();
+    // Fleurs de départ
+    const near = this.s.tiles.filter(t => t.t === 'g' && hexDist(t.q, t.r) <= 2).sort(() => Math.random() - 0.5);
+    ['daisy', 'daisy', 'tulip', 'daisy'].forEach((id, i) => near[i].flower = { id, g: 1, cd: 0 });
+    this.resetRuntime(); this.buildTerrain(); this.emit('change');
   }
 
-  seedStartingCrops() {
-    // Quelques carottes déjà mûres près de la grange pour la première récolte.
-    const end = this.s.path[this.s.path.length - 1];
-    const spots = [];
-    this.forCells((cell, r, c) => {
-      if (cell.t === 'g' && !this.isNearPath(r, c)) spots.push({ r, c, d: Math.hypot(r - end.r, c - end.c) });
-    });
-    spots.sort((a, b) => a.d - b.d);
-    spots.slice(0, 3).forEach(p => this.s.grid[p.r][p.c].crop = { id: 'carrot', g: 1 });
-    spots.slice(3, 5).forEach(p => this.s.grid[p.r][p.c].crop = { id: 'sunflower', g: 0.5 });
+  indexTiles() {
+    this.map = new Map();
+    for (const t of this.s.tiles) { const w = toWorld(t.q, t.r); t.x = w.x; t.y = w.y; this.map.set(key(t.q, t.r), t); }
+    this.hive = this.map.get('0,0');
   }
+  forTiles(f) { for (const t of this.s.tiles) f(t); }
+  tile(q, r) { return this.map.get(key(q, r)); }
+  nb(t) { return DIRS.map(([dq, dr]) => this.tile(t.q + dq, t.r + dr)).filter(Boolean); }
+  passable(t) { return t.t === 'hive' || (t.t === 'g' && !(t.def && DEFENSES[t.def.id].blocks)); }
+
+  // Champ de flux : distance de chaque case à la ruche pour les ennemis au sol.
+  computeFlow() {
+    this.forTiles(t => t.dist = Infinity);
+    this.hive.dist = 0;
+    const q = [this.hive];
+    while (q.length) {
+      const c = q.shift();
+      for (const n of this.nb(c)) if (n.dist === Infinity && this.passable(n)) { n.dist = c.dist + 1; q.push(n); }
+    }
+  }
+  edgesReachable() { return this.s.tiles.every(t => hexDist(t.q, t.r) !== RADIUS || !this.passable(t) || t.dist < Infinity) && this.s.tiles.some(t => hexDist(t.q, t.r) === RADIUS && t.dist < Infinity); }
 
   hasSave() { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } }
-  save() {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ s: this.s, swarm: this.swarm.toJSON() })); } catch { }
-  }
+  save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ s: this.s, chief: this.chief.toJSON() }, (k, v) => (k === 'res' || k === 'dist' || k === 'x' || k === 'y') ? undefined : v)); } catch { } }
   load() {
     try {
       const d = JSON.parse(localStorage.getItem(SAVE_KEY));
-      this.s = d.s; this.swarm = new Swarm(d.swarm);
-      this.s.phase = 'day';
-      this.resetRuntime(); this.buildTerrain();
-      this.emit('change');
+      if (!d?.s?.tiles) return false;
+      this.s = d.s; this.chief = new HornetChief(d.chief);
+      this.s.tiles.forEach(t => { if (t.flower) t.flower.res = null; });
+      this.indexTiles(); this.computeFlow(); this.resetRuntime(); this.buildTerrain(); this.emit('change');
       return true;
     } catch { return false; }
   }
-  clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch { } }
   best() { try { return +localStorage.getItem(BEST_KEY) || 0; } catch { return 0; } }
 
-  // ---------- Utilitaires grille ----------
-  forCells(fn) { const g = this.s.grid; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) fn(g[r][c], r, c); }
-  cell(r, c) { return this.s.grid[r]?.[c]; }
-  isNearPath(r, c) { return neighbors(this.s.grid, r, c).some(n => n.cell.t === 'p' || n.cell.t === 'b'); }
-  nearWater(r, c) { return neighbors(this.s.grid, r, c, true).some(n => n.cell.t === 'w'); }
-  isGuarded(r, c) {
-    let g = false;
-    this.forCells((cell, rr, cc) => {
-      if (cell.tower?.id === 'scarecrow' && Math.hypot(rr - r, cc - c) <= TOWERS.scarecrow.range[cell.tower.lvl] + 0.3) g = true;
-    });
-    return g;
+  // ---------- Économie ----------
+  cap() { return hiveCap(this.s.hiveLvl); }
+  maxBees() { return hiveMaxBees(this.s.hiveLvl); }
+  addHoney(v) { const before = this.s.honey; this.s.honey = Math.min(this.cap(), this.s.honey + v); return this.s.honey - before; }
+  spend(v) { if (this.s.honey < v) { sfx('error'); this.toast('Pas assez de miel 🍯'); return false; } this.s.honey -= v; return true; }
+  upgradeHive() {
+    const cost = hiveUpgradeCost(this.s.hiveLvl);
+    if (!this.spend(cost)) return;
+    this.s.hiveLvl++; this.s.hiveHp = Math.min(hiveMaxHp(this.s.hiveLvl), this.s.hiveHp + 15);
+    this.puff(0, 0, '#ffd166', 24); sfx('build'); this.toast(`👑 Ruche niveau ${this.s.hiveLvl} : ${this.maxBees()} abeilles max`); this.emit('change');
   }
-  cap() { return 40 + this.s.capLvl * 30; }
-
-  // ---------- Marché ----------
-  mult(k) { return this.s.market.mult[k]; }
-  targetMult(k) { const e = this.s.market.event; return e && e.item === k ? e.mod : 1; }
-  price(k) { return Math.max(1, ITEMS[k].base * this.mult(k) * (1 + this.s.rep * 0.02)); }
-  buyPrice(k) { return Math.ceil(this.price(k) * 1.5); }
-  sell(k, n) {
-    n = Math.min(n, this.s.stock[k]); if (n <= 0) return sfx('error');
-    let total = 0;
-    for (let i = 0; i < n; i++) {
-      total += this.price(k);
-      this.s.market.mult[k] = Math.max(0.35, this.s.market.mult[k] - 0.025);
-    }
-    total = Math.round(total);
-    this.s.stock[k] -= n; this.s.coins += total; this.s.stats.earned += total;
-    sfx('coin'); this.toast(`Vendu ${n} ${ITEMS[k].emoji} pour ${total} 🪙`); this.emit('change');
+  setAlloc(f, g) {
+    f = Math.max(0, Math.min(1, f)); g = Math.max(0, Math.min(1 - f, g));
+    this.s.alloc = { f, g, n: Math.max(0, 1 - f - g) }; this.s.target = { ...this.s.alloc };
   }
-  buy(k, n) {
-    const room = this.cap() - this.s.stock[k];
-    n = Math.min(n, room);
-    if (n <= 0) { sfx('error'); return this.toast('Silo plein pour cet article'); }
-    const cost = this.buyPrice(k) * n;
-    if (this.s.coins < cost) { sfx('error'); return this.toast('Pas assez de pièces'); }
-    this.s.coins -= cost; this.s.stock[k] += n;
-    this.s.market.mult[k] = Math.min(2.5, this.s.market.mult[k] + 0.02 * n);
-    sfx('coin'); this.emit('change');
-  }
-  upgradeSilo() {
-    const cost = 60 * (this.s.capLvl + 1);
-    if (this.s.coins < cost) { sfx('error'); return this.toast('Pas assez de pièces'); }
-    this.s.coins -= cost; this.s.capLvl++; sfx('build'); this.toast(`Silo agrandi : ${this.cap()} par article`); this.emit('change');
-  }
-  siloCost() { return 60 * (this.s.capLvl + 1); }
-
-  // ---------- Commandes des villageois ----------
-  genOrders() {
+  estimateThreat() {
     const s = this.s;
-    const pool = ['carrot', 'carrot', 'seed'];
-    if (s.day >= 2) pool.push('pepper');
-    if (s.day >= 3) pool.push('pumpkin', 'pumpkin');
-    let add = s.day === 1 ? 1 : 2;
-    while (s.orders.length < 3 && add-- > 0) {
-      const item = pick(pool);
-      const q = { carrot: [4, 10], seed: [10, 25], pepper: [3, 8], pumpkin: [1, 3] }[item];
-      const qty = ri(q[0], q[1] + Math.floor(s.day / 3));
-      const v = pick(VILLAGERS);
-      s.orders.push({
-        id: s.nextOrderId++, who: v.who, emoji: v.emoji, item, qty,
-        reward: Math.ceil(qty * ITEMS[item].base * 1.7 * (1 + s.rep * 0.05)) + 5,
-        deadline: s.day + 2,
-      });
-    }
+    let hp = 0;
+    if (s.phase === 'wave') { for (const e of this.enemies) hp += e.hp; for (const q of this.queue) hp += ENEMIES[q.sp].hp * this.hpMul(s.wave); }
+    else { const w = s.wave + 1; hp = this.waveSize(w) * 24 * this.hpMul(w) + (w % 5 === 0 ? 520 * this.hpMul(w) : 0); }
+    return hp / 28;
   }
-  deliver(id) {
-    const s = this.s, o = s.orders.find(o => o.id === id);
-    if (!o || s.stock[o.item] < o.qty) { sfx('error'); return this.toast('Stock insuffisant'); }
-    s.stock[o.item] -= o.qty; s.coins += o.reward; s.stats.earned += o.reward; s.rep++;
-    s.orders = s.orders.filter(x => x !== o);
-    sfx('coin'); this.toast(`${o.emoji} Merci ! +${o.reward} 🪙  +1 ⭐`); this.emit('change');
-  }
+  hpMul(w) { return 1 + 0.15 * (w - 1); }
+  waveSize(w) { return 3 + Math.round(1.8 * w); }
 
-  // ---------- Robots-jardiniers (agents IA autonomes) ----------
-  robotCost() { return 120 + 80 * this.s.robots.length; }
-  buyRobot() {
-    if (this.s.robots.length >= 3) return this.toast('Maximum 3 robots');
-    const cost = this.robotCost();
-    if (this.s.coins < cost) { sfx('error'); return this.toast('Pas assez de pièces'); }
-    this.s.coins -= cost;
-    const end = this.s.path[this.s.path.length - 1];
-    this.s.robots.push({ x: end.c + 0.5, y: end.r - 0.5, target: null, work: 0 });
-    sfx('build'); this.toast('🤖 Robot-jardinier activé !'); this.emit('change');
-  }
-
-  // ---------- Cycle jour / nuit ----------
-  startDay(first = false) {
-    const s = this.s;
-    s.phase = 'day'; s.dayTime = 0; s.dayLen = s.day === 1 ? 80 : 50;
-    if (!first) {
-      const before = s.orders.length;
-      s.orders = s.orders.filter(o => o.deadline >= s.day);
-      if (s.orders.length < before) { s.rep = Math.max(0, s.rep - 1); this.toast('Une commande a expiré… -1 ⭐'); }
-      const upkeep = s.robots.length * 4;
-      if (upkeep) { s.coins = Math.max(0, s.coins - upkeep); }
-    }
-    s.market.event = s.day > 1 && Math.random() < 0.6 ? pick(MARKET_EVENTS) : null;
-    if (s.market.event) this.toast('🏪 ' + s.market.event.text);
-    this.genOrders();
-    sfx('day');
-    this.save();
-    this.emit('change');
-  }
-
-  startNight() {
-    const s = this.s;
-    if (s.phase !== 'day') return;
-    if (s.tutorial < 4) { s.tutorial = 4; this.emit('tutorial', 4); }
-    const left = Math.max(0, s.dayLen - s.dayTime);
-    const bonus = Math.floor(left / 3);
-    if (bonus > 0) { s.coins += bonus; this.toast(`Nuit anticipée : +${bonus} 🪙`); }
-    s.phase = 'night';
-    const n = s.day;
-    const count = Math.round(5 + n * 2.4);
-    const w = this.swarm.spawnWeights(n);
-    const keys = Object.keys(w), tot = keys.reduce((a, k) => a + w[k], 0);
-    this.spawnQueue = [];
-    for (let i = 0; i < count; i++) {
-      let r = Math.random() * tot, sp = keys[0];
-      for (const k of keys) { r -= w[k]; if (r <= 0) { sp = k; break; } }
-      this.spawnQueue.push(sp);
-    }
-    if (n % 5 === 0) this.spawnQueue.push('boar');
-    this.spawnInterval = Math.max(0.5, 1.4 - n * 0.05);
-    this.spawnTimer = 1.5;
-    sfx('night');
-    this.emit('change');
-  }
-
-  endNight() {
-    const s = this.s;
-    s.phase = 'report';
-    const reward = 10 + s.day * 3;
-    s.coins += reward;
-    const report = this.swarm.evolve(s.day + 1);
-    this.emit('nightEnd', { report, reward, day: s.day });
-  }
-
-  nextDay() { this.s.day++; this.startDay(); }
-
-  // ---------- Actions joueur ----------
-  tapCell(r, c) {
-    const cell = this.cell(r, c); if (!cell) return;
-    const t = this.tool;
-    if (cell.tower && t?.kind !== 'shovel') { this.selected = { r, c }; sfx('click'); return this.emit('towerTap', r, c); }
-    if (t?.kind === 'crop') return this.plant(r, c, t.id);
-    if (t?.kind === 'tower') return this.build(r, c, t.id);
-    if (t?.kind === 'shovel') {
-      if (cell.crop) { cell.crop = null; cell.last = null; sfx('plant'); this.emit('change'); }
-      return;
-    }
-    if (cell.crop && cell.crop.g >= 1) return this.harvest(r, c);
+  // ---------- Actions ----------
+  tap(t) {
+    if (!t) return;
+    const tool = this.tool;
+    if (t.t === 'hive') { sfx('click'); return this.emit('hiveTap'); }
+    if (t.def && tool?.kind !== 'shovel') { this.selected = t; sfx('click'); return this.emit('defTap', t); }
+    if (tool?.kind === 'flower') return this.plant(t, tool.id);
+    if (tool?.kind === 'def') return this.build(t, tool.id);
+    if (tool?.kind === 'shovel') { if (t.flower) { t.flower = null; sfx('plant'); this.puff(t.x, t.y, '#8a5a3b', 6); } return; }
+    if (t.flower) { const f = FLOWERS[t.flower.id]; this.toast(`${f.emoji} ${f.name} : ${t.flower.g < 1 ? Math.round(t.flower.g * 100) + ' % de croissance' : 'en fleur, prête à butiner'}`); }
     this.selected = null;
   }
-
-  plant(r, c, id) {
-    const cell = this.cell(r, c), def = CROPS[id];
-    if (cell.t !== 'g' || cell.crop || cell.tower) return;
-    if (this.s.coins < def.cost) { sfx('error'); return this.toast('Pas assez de pièces'); }
-    this.s.coins -= def.cost;
-    cell.crop = { id, g: 0 }; cell.last = id;
-    this.puff(c + 0.5, r + 0.5, '#7a4a2a', 6);
-    sfx('plant');
-    if (this.s.tutorial === 2 && id === 'sunflower') this.advanceTutorial();
+  plant(t, id) {
+    if (t.t !== 'g' || t.flower || t.def) return;
+    if (!this.spend(FLOWERS[id].cost)) return;
+    t.flower = { id, g: 0, cd: 0 };
+    this.puff(t.x, t.y, '#7bc950', 8); sfx('plant');
+    if (this.s.tutorial === 0) this.nextTutorial();
     this.emit('change');
   }
-
-  harvest(r, c, silent) {
-    const cell = this.cell(r, c), crop = cell.crop;
-    if (!crop || crop.g < 1) return false;
-    const def = CROPS[crop.id], room = this.cap() - this.s.stock[def.item];
-    if (room <= 0) { if (!silent) this.floater(c + 0.5, r + 0.3, 'Silo plein !', '#ff6b6b'); return false; }
-    const n = Math.min(room, def.yield);
-    this.s.stock[def.item] += n; this.s.stats.harvest += n;
-    cell.crop = null; cell.last = crop.id;
-    this.floater(c + 0.5, r + 0.3, `+${n}${ITEMS[def.item].emoji}`, '#fff');
-    this.puff(c + 0.5, r + 0.5, '#ffe27a', 8);
-    sfx('harvest');
-    if (this.s.tutorial === 0) this.advanceTutorial();
-    this.emit('change');
-    return true;
-  }
-
-  build(r, c, id) {
-    const cell = this.cell(r, c), def = TOWERS[id];
-    if (cell.t !== 'g' || cell.crop || cell.tower) return;
-    if (this.s.coins < def.cost) { sfx('error'); return this.toast('Pas assez de pièces'); }
-    this.s.coins -= def.cost;
-    cell.tower = { id, lvl: 0, cd: 0, shots: 0, ang: -Math.PI / 2, spent: def.cost };
-    this.puff(c + 0.5, r + 0.5, '#d7c49e', 10);
-    sfx('build');
-    if (this.s.tutorial === 1) this.advanceTutorial();
+  build(t, id) {
+    const d = DEFENSES[id];
+    if (t.t !== 'g' || t.flower || t.def) return;
+    if (d.blocks && this.enemies.some(e => !e.flying && Math.hypot(e.x - t.x, e.y - t.y) < 0.7)) { sfx('error'); return this.toast('Un ennemi est sur cette case'); }
+    if (this.s.honey < d.cost) { sfx('error'); return this.toast('Pas assez de miel 🍯'); }
+    t.def = { id, lvl: 0, cd: 0, spent: d.cost, honey: d.honey || 0 };
+    if (d.blocks) {
+      this.computeFlow();
+      if (!this.edgesReachable()) { t.def = null; this.computeFlow(); sfx('error'); return this.toast('Impossible : ça bloquerait tout chemin vers la ruche'); }
+    }
+    this.s.honey -= d.cost;
+    this.puff(t.x, t.y, '#e9c46a', 10); sfx('build');
+    if (this.s.tutorial === 1 && id === 'jar') this.nextTutorial();
     this.emit('change');
   }
-
-  upgradeCost(t) { return t.lvl >= 2 ? null : Math.round(TOWERS[t.id].cost * UPGRADE_MULT[t.lvl + 1]); }
-  upgrade(r, c) {
-    const t = this.cell(r, c)?.tower; if (!t) return;
-    const cost = this.upgradeCost(t);
-    if (cost == null) return;
-    if (this.s.coins < cost) { sfx('error'); return this.toast('Pas assez de pièces'); }
-    this.s.coins -= cost; t.lvl++; t.spent += cost;
-    this.puff(c + 0.5, r + 0.5, '#fff6a8', 14); sfx('build'); this.emit('change');
+  upgradeCost(t) { return t.def.lvl >= 2 || t.def.id === 'lure' ? null : Math.round(DEFENSES[t.def.id].cost * UPGRADE[t.def.lvl + 1]); }
+  upgrade(t) {
+    const c = this.upgradeCost(t); if (c == null || !this.spend(c)) return;
+    t.def.lvl++; t.def.spent += c; this.puff(t.x, t.y, '#fff3b0', 14); sfx('build'); this.emit('change');
   }
-  sellTower(r, c) {
-    const cell = this.cell(r, c), t = cell?.tower; if (!t) return;
-    const refund = Math.floor(t.spent * 0.6);
-    this.s.coins += refund; cell.tower = null; this.selected = null;
-    this.puff(c + 0.5, r + 0.5, '#d7c49e', 10); sfx('coin'); this.emit('change');
+  refill(t) { if (t.def?.id !== 'lure') return; const need = 15 - t.def.honey; if (need > 0 && this.spend(need)) { t.def.honey = 15; sfx('honey'); this.emit('change'); } }
+  sell(t) {
+    if (!t.def) return;
+    this.addHoney(Math.floor(t.def.spent * 0.6)); t.def = null; this.selected = null;
+    this.computeFlow(); this.puff(t.x, t.y, '#e9c46a', 8); sfx('honey'); this.emit('change');
+  }
+  nextTutorial() { this.s.tutorial++; this.emit('tutorial', this.s.tutorial); }
+
+  // ---------- Vagues ----------
+  prepareWarn() { if (!this.s.warn) { this.s.warn = this.chief.choose(this.s.wave + 1); sfx('bee'); this.emit('change'); } }
+  startWave() {
+    const s = this.s; if (s.phase !== 'build') return;
+    this.prepareWarn();
+    const bonus = Math.floor(s.timer / 3);
+    if (bonus > 2) { this.addHoney(bonus); this.toast(`Vague anticipée : +${bonus} 🍯`); }
+    if (s.tutorial < 4) { s.tutorial = 4; this.emit('tutorial', 4); }
+    s.wave++; s.phase = 'wave';
+    const w = s.wave, n = this.waveSize(w), pool = Object.entries(ENEMIES).filter(([, e]) => !e.boss && e.from <= w).map(([k]) => k);
+    this.queue = [];
+    for (let i = 0; i < n; i++) {
+      const sector = s.warn.second != null && Math.random() < 0.3 ? s.warn.second : s.warn.main;
+      this.queue.push({ sp: pick(pool), sector });
+    }
+    if (w % 5 === 0) this.queue.push({ sp: 'bear', sector: s.warn.main });
+    this.spawnInterval = Math.max(0.45, 1.1 - 0.04 * w); this.spawnT = 0.5;
+    this.waveTotal = this.queue.length;
+    sfx('wave'); this.emit('change');
+  }
+  endWave() {
+    const s = this.s;
+    const learned = this.chief.endWave();
+    s.phase = 'build'; s.timer = 35; s.warn = null;
+    const bonus = 8 + 2 * s.wave; this.addHoney(bonus);
+    sfx('clear');
+    this.emit('waveEnd', { wave: s.wave, bonus, learned });
+    this.save(); this.emit('change');
+  }
+  spawn(q) {
+    const s = this.s, base = ENEMIES[q.sp], mul = this.hpMul(s.wave);
+    const edge = ring(RADIUS).map(h => this.tile(h.q, h.r)).filter(t => sectorOf(t.x, t.y) === q.sector && (base.flying || base.crusher || t.dist < Infinity));
+    const t = pick(edge.length ? edge : ring(RADIUS).map(h => this.tile(h.q, h.r)).filter(t => t.dist < Infinity));
+    const len = Math.hypot(t.x, t.y), k = (len + 1) / len;
+    this.enemies.push({
+      sp: q.sp, sector: q.sector, x: t.x * k, y: t.y * k, next: t, hp: base.hp * mul, max: base.hp * mul,
+      speed: base.speed, flying: !!base.flying, armor: (base.armor || 0) + Math.floor(s.wave / 6),
+      start: len + 1, slowT: 0, slowA: 0, stopT: 0, lure: null, lured: new Set(), atk: 0, wob: Math.random() * 7, flip: 1, flash: 0,
+    });
   }
 
-  advanceTutorial() { this.s.tutorial++; this.emit('tutorial', this.s.tutorial); }
-
-  // ---------- Simulation ----------
+  // ---------- Boucle ----------
   update(dt) {
-    if (this.paused || !this.s) return;
+    if (this.paused || !this.s || this.s.phase === 'over') { this.fx(dt); return; }
     dt = Math.min(dt, 0.05) * this.speed;
     this.time += dt;
     const s = this.s;
-    this.nightAlpha += ((s.phase === 'night' ? 1 : 0) - this.nightAlpha) * Math.min(1, dt * 1.5);
-
-    // Marché : les prix reviennent doucement vers leur cible.
-    for (const k of ITEM_KEYS) s.market.mult[k] += (this.targetMult(k) - s.market.mult[k]) * 0.03 * dt;
-
-    if (s.phase === 'day') {
-      s.dayTime += dt;
-      if (s.dayTime >= s.dayLen) this.startNight();
+    if (s.phase === 'build') {
+      s.timer -= dt;
+      if (s.timer <= 8) this.prepareWarn();
+      if (s.timer <= 0) this.startWave();
     }
-    if (s.phase === 'over') return this.updateFx(dt);
+    this.colony(dt);
+    this.forTiles(t => {
+      const f = t.flower;
+      if (f) { if (f.g < 1) f.g = Math.min(1, f.g + dt / FLOWERS[f.id].grow); else if (f.cd > 0) f.cd -= dt; }
+    });
+    if (s.phase === 'wave' && this.queue.length) {
+      this.spawnT -= dt;
+      if (this.spawnT <= 0) { this.spawnT = this.spawnInterval * rand(0.6, 1.4); this.spawn(this.queue.shift()); }
+    }
+    this.updateEnemies(dt);
+    this.updateDefenses(dt);
+    this.updateBees(dt);
+    this.fx(dt);
+    if (s.phase === 'wave' && !this.queue.length && !this.enemies.length) this.endWave();
+    this.hudT = (this.hudT || 0) + dt;
+    if (this.hudT > 0.25) { this.hudT = 0; this.emit('tick'); }
+  }
 
-    // Croissance des cultures
-    this.forCells((cell, r, c) => {
-      if (cell.crop && cell.crop.g < 1) {
-        const def = CROPS[cell.crop.id];
-        cell.crop.g = Math.min(1, cell.crop.g + dt / def.grow * (this.nearWater(r, c) ? 1.5 : 1));
+  colony(dt) {
+    const s = this.s, C = COLONY;
+    // La Reine IA ajuste la répartition
+    if (s.auto) {
+      this.queenT -= dt;
+      if (this.queenT <= 0) { this.queenT = 3; const p = planColony(this); s.target = { f: p.f, g: p.g, n: p.n }; s.queenWhy = p.why; }
+      const k = Math.min(1, dt * 0.8);
+      for (const r of ['f', 'g', 'n']) s.alloc[r] += (s.target[r] - s.alloc[r]) * k;
+    }
+    // Consommation
+    s.honey -= s.bees * C.eat * dt;
+    if (s.honey < 0) {
+      s.honey = 0; s.bees = Math.max(1, s.bees - 0.04 * dt);
+      if (!this.starveWarned) { this.starveWarned = true; this.toast('⚠️ La colonie a faim ! Plante des fleurs ou envoie plus de butineuses.'); }
+    } else this.starveWarned = false;
+    // Nourrices
+    const room = this.maxBees() - s.bees;
+    if (room > 0) {
+      let born = Math.min(room, s.bees * s.alloc.n * C.nurseRate * dt);
+      born = Math.min(born, s.pollen / C.newBeePollen, s.honey / C.newBeeHoney);
+      if (born > 0) { s.bees += born; s.pollen -= born * C.newBeePollen; s.honey -= born * C.newBeeHoney; s.stats.born += born; }
+    }
+    // Synchronise les abeilles visibles avec la répartition
+    this.syncT -= dt;
+    if (this.syncT <= 0) {
+      this.syncT = 0.5;
+      const n = Math.floor(s.bees), F = Math.round(n * s.alloc.f), G = Math.min(n - F, Math.round(n * s.alloc.g));
+      while (this.foragers.length > F) { const i = this.foragers.findIndex(b => b.state === 'idle'); const b = this.foragers.splice(i >= 0 ? i : this.foragers.length - 1, 1)[0]; if (b.flower?.flower) b.flower.flower.res = null; }
+      while (this.foragers.length < F) this.foragers.push({ x: rand(-0.15, 0.15), y: rand(-0.15, 0.15), state: 'idle', hp: 3, t: 0, ph: Math.random() * 6 });
+      while (this.guards.length > G) this.guards.pop();
+      while (this.guards.length < G) this.guards.push({ x: rand(-0.2, 0.2), y: rand(-0.2, 0.2), hp: C.guardHp, ang: Math.random() * 6, ph: Math.random() * 6 });
+    }
+  }
+
+  killBee(list, b) {
+    const i = list.indexOf(b); if (i < 0) return;
+    list.splice(i, 1); this.s.bees = Math.max(0, this.s.bees - 1); this.s.stats.lost++;
+    if (b.flower?.flower) b.flower.flower.res = null;
+    this.puff(b.x, b.y, '#ffd166', 5);
+  }
+
+  updateBees(dt) {
+    const s = this.s, C = COLONY;
+    const move = (b, tx, ty, spd) => {
+      const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy);
+      if (d < 0.04) return true;
+      const st = Math.min(d, spd * dt); b.x += dx / d * st; b.y += dy / d * st; if (Math.abs(dx) > 0.01) b.flip = dx < 0 ? -1 : 1;
+      return false;
+    };
+    const danger = (t) => this.enemies.some(e => Math.hypot(e.x - t.x, e.y - t.y) < 1.3);
+    for (const b of [...this.foragers]) {
+      b.ph += dt * 30;
+      if (b.state === 'idle') {
+        let best = null, bs = 0;
+        this.forTiles(t => {
+          const f = t.flower; if (!f || f.g < 1 || f.cd > 0 || f.res || danger(t)) return;
+          const d = FLOWERS[f.id], sc = (d.honey + d.pollen * 0.6) / (Math.hypot(t.x, t.y) + 1);
+          if (sc > bs) { bs = sc; best = t; }
+        });
+        if (best) { b.flower = best; best.flower.res = b; b.state = 'go'; }
+        else { b.t += dt; b.x = Math.cos(b.t * 2 + b.ph) * 0.18; b.y = Math.sin(b.t * 2 + b.ph) * 0.12 - 0.1; }
+      } else if (b.state === 'go') {
+        if (!b.flower.flower) { b.state = 'back'; continue; }
+        if (move(b, b.flower.x + 0.05, b.flower.y - 0.1, C.beeSpeed)) { b.state = 'collect'; b.t = C.collectTime; }
+      } else if (b.state === 'collect') {
+        b.t -= dt;
+        if (b.t <= 0) {
+          const f = b.flower.flower;
+          if (f) { const d = FLOWERS[f.id]; b.carry = { h: d.honey, p: d.pollen }; f.cd = d.cd; f.res = null; }
+          b.state = 'back';
+        }
+      } else if (b.state === 'back') {
+        if (move(b, 0, -0.05, C.beeSpeed)) {
+          if (b.carry) {
+            const got = this.addHoney(b.carry.h); s.pollen = Math.min(this.cap(), s.pollen + b.carry.p); s.stats.honey += got;
+            if (Math.random() < 0.25) { this.floater(0.2, -0.3, '+🍯', '#ffd166', 0.7); sfx('honey'); }
+            b.carry = null; this.hivePulse = 0.3;
+          }
+          b.state = 'idle'; b.flower = null;
+        }
+      }
+    }
+    // Gardiennes : réparties entre la ruche et les postes de garde
+    const anchors = [{ x: 0, y: 0, r: 2.2 }];
+    this.forTiles(t => { if (t.def?.id === 'post') anchors.push({ x: t.x, y: t.y, r: DEFENSES.post.range[t.def.lvl] }); });
+    [...this.guards].forEach((b, i) => {
+      if (!this.guards.includes(b)) return;
+      b.ph += dt * 30;
+      const a = anchors[i % anchors.length];
+      if (b.target && (b.target.dead || Math.hypot(b.target.x - a.x, b.target.y - a.y) > a.r + 0.6)) b.target = null;
+      if (!b.target) {
+        let best = null, bd = a.r;
+        for (const e of this.enemies) { const d = Math.hypot(e.x - a.x, e.y - a.y); if (d < bd) { bd = d; best = e; } }
+        b.target = best;
+      }
+      if (b.target) {
+        const e = b.target;
+        if (move(b, e.x + Math.cos(b.ph * 0.1) * 0.15, e.y + Math.sin(b.ph * 0.1) * 0.15, 3.2) || Math.hypot(e.x - b.x, e.y - b.y) < 0.3) {
+          this.hurt(e, C.guardDps * dt, true);
+          if (!ENEMIES[e.sp].flying || ENEMIES[e.sp].hunter) { b.hp -= (ENEMIES[e.sp].hunter ? 1.6 : 0.8) * dt; if (b.hp <= 0) this.killBee(this.guards, b); }
+        }
+      } else {
+        b.ang += dt * 1.6;
+        const rad = anchors.length > 1 && a.x !== 0 ? 0.45 : 0.6 + (i % 3) * 0.15;
+        move(b, a.x + Math.cos(b.ang) * rad, a.y + Math.sin(b.ang) * rad * 0.8, 2.4);
       }
     });
-
-    this.updateSpawns(dt);
-    this.updateEnemies(dt);
-    this.updateTowers(dt);
-    this.updateProjectiles(dt);
-    this.updateRobots(dt);
-    this.updateFx(dt);
-
-    if (s.phase === 'night' && this.spawnQueue.length === 0 && this.enemies.length === 0) this.endNight();
-    this.hudTimer = (this.hudTimer || 0) + dt;
-    if (this.hudTimer > 0.25) { this.hudTimer = 0; this.emit('tick'); }
-  }
-
-  updateSpawns(dt) {
-    if (this.s.phase !== 'night' || !this.spawnQueue.length) return;
-    this.spawnTimer -= dt;
-    if (this.spawnTimer > 0) return;
-    this.spawnTimer = this.spawnInterval * rand(0.7, 1.3);
-    const sp = this.spawnQueue.shift();
-    const base = ENEMIES[sp], night = this.s.day;
-    let stats, idx = -1;
-    if (base.boss) {
-      stats = { maxHp: base.hp * (1 + 0.25 * (night / 5 - 1)), speed: base.speed, armor: 2, res: this.swarm.resistanceProfile(), hunger: 0 };
-    } else {
-      idx = this.swarm.pick(sp, night);
-      stats = this.swarm.express(sp, idx, night);
-    }
-    this.enemies.push({
-      sp, idx, d: -0.8, x: 0, y: 0, hp: stats.maxHp, maxHp: stats.maxHp, speed: stats.speed,
-      armor: stats.armor, res: stats.res, hunger: stats.hunger, flying: !!base.flying, boss: !!base.boss,
-      reward: base.reward, barnDmg: base.barnDmg || 1, eating: 0, eatCell: null, lastTile: -1,
-      eaten: 0, flip: 1, wob: Math.random() * 6, flash: 0, burn: null, poison: null, slow: 0,
-    });
-  }
-
-  posAt(d) {
-    const p = this.s.path;
-    if (d < 0) return { x: p[0].c + 0.5, y: p[0].r + 0.5 + d };
-    const i = Math.min(p.length - 2, Math.floor(d)), f = Math.min(1, d - i);
-    const a = p[i], b = p[i + 1];
-    return { x: a.c + 0.5 + (b.c - a.c) * f, y: a.r + 0.5 + (b.r - a.r) * f };
   }
 
   updateEnemies(dt) {
-    const s = this.s, last = s.path.length - 1;
-    const scarecrows = [];
-    this.forCells((cell, r, c) => { if (cell.tower?.id === 'scarecrow') scarecrows.push({ x: c + 0.5, y: r + 0.5, t: cell.tower }); });
-
+    const s = this.s;
+    const poppies = [], lures = [];
+    this.forTiles(t => {
+      if (t.flower?.id === 'poppy' && t.flower.g >= 1) poppies.push(t);
+      if (t.def?.id === 'lure' && t.def.honey > 0) lures.push(t);
+    });
     for (const e of this.enemies) {
       if (e.dead) continue;
-      e.flash = Math.max(0, e.flash - dt);
-      // Effets sur la durée
-      if (e.burn) { this.hurt(e, e.burn.dps * dt, 'fire', true); if ((e.burn.t -= dt) <= 0) e.burn = null; if (Math.random() < 0.3) this.particles.push({ x: e.x + rand(-0.15, 0.15), y: e.y, vx: 0, vy: -0.8, life: 0.4, max: 0.4, color: '#ff8a3d', size: 0.06 }); }
-      if (e.poison) { this.hurt(e, e.poison.dps * dt, 'poison', true); if ((e.poison.t -= dt) <= 0) e.poison = null; }
-      if (e.dead) continue;
+      const base = ENEMIES[e.sp];
+      e.flash = Math.max(0, e.flash - dt); e.wob += dt * 10;
+      let slow = 0;
+      for (const p of poppies) if (Math.hypot(p.x - e.x, p.y - e.y) < FLOWERS.poppy.aura) slow = Math.max(slow, FLOWERS.poppy.slow);
+      if (e.slowT > 0) { e.slowT -= dt; slow = Math.max(slow, e.slowA); }
+      e.slowed = slow > 0;
+      const spd = e.speed * (1 - slow) * dt;
+      const ox = e.x;
 
-      // Ralentissement des épouvantails (les volants l'ignorent)
-      e.slow = 0;
-      if (!e.flying) for (const sc of scarecrows) {
-        const def = TOWERS.scarecrow;
-        if (Math.hypot(sc.x - e.x, sc.y - e.y) <= def.range[sc.t.lvl]) e.slow = Math.max(e.slow, def.slow[sc.t.lvl]);
+      // Les frelons chassent les abeilles à leur portée
+      if (base.hunter) {
+        e.atk -= dt;
+        if (e.atk <= 0) {
+          for (const list of [this.foragers, this.guards]) {
+            const b = list.find(b => Math.hypot(b.x - e.x, b.y - e.y) < 0.45);
+            if (b) { b.hp -= 2; e.atk = 1.5; if (b.hp <= 0) this.killBee(list, b); break; }
+          }
+        }
       }
 
-      if (e.eating > 0) {
-        e.eating -= dt;
-        if (e.eating <= 0) {
-          const cell = e.eatCell && this.cell(e.eatCell.r, e.eatCell.c);
-          if (cell?.crop) {
-            const em = CROPS[cell.crop.id].emoji;
-            cell.crop = null; e.eaten++; s.stats.eaten++;
-            this.floater(e.eatCell.c + 0.5, e.eatCell.r + 0.4, `😋 -${em}`, '#ffb3b3');
-          }
-          e.eatCell = null;
+      if (e.flying) {
+        if (e.stopT > 0) {
+          e.stopT -= dt;
+          if (e.stopT <= 0 && e.lure?.def) { e.lure.def.honey -= 3; if (e.lure.def.honey <= 0) { this.toast('🍯 Un leurre est vide'); e.lure.def = null; } }
+          continue;
+        }
+        let tx = 0, ty = 0;
+        const lure = lures.find(l => l.def && !e.lured.has(l) && Math.hypot(l.x - e.x, l.y - e.y) < DEFENSES.lure.range[0]);
+        if (lure) { tx = lure.x; ty = lure.y; }
+        const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy);
+        if (lure && d < 0.15) { e.lured.add(lure); e.lure = lure; e.stopT = 3; continue; }
+        e.x += dx / d * spd + Math.cos(e.wob * 0.3) * 0.01; e.y += dy / d * spd + Math.sin(e.wob * 0.37) * 0.01;
+      } else if (base.crusher) {
+        const d = Math.hypot(e.x, e.y);
+        e.x -= e.x / d * spd; e.y -= e.y / d * spd;
+        const h = fromWorld(e.x, e.y), t = this.tile(h.q, h.r);
+        if (t && (t.def || t.flower) && t.t !== 'hive') {
+          const what = t.def ? DEFENSES[t.def.id].name : FLOWERS[t.flower.id].name;
+          t.def = null; t.flower = null; this.computeFlow(); this.puff(t.x, t.y, '#8a5a3b', 14); this.shake = 0.2;
+          this.floater(t.x, t.y - 0.3, `💥 ${what}`, '#ffb4a2');
         }
       } else {
-        e.d += e.speed * (1 - e.slow) * dt;
-      }
-      const p = this.posAt(e.d);
-      if (p.x !== e.x) e.flip = p.x < e.x ? -1 : 1;
-      e.x = p.x; e.y = p.y;
-
-      // Grignotage des cultures au bord du chemin
-      const tile = Math.round(e.d);
-      if (tile !== e.lastTile && tile >= 0 && tile < last && e.eating <= 0) {
-        e.lastTile = tile;
-        const pt = s.path[tile];
-        const near = neighbors(s.grid, pt.r, pt.c, e.flying).filter(n => n.cell.crop);
-        if (near.length) {
-          const n = pick(near);
-          const chance = e.hunger * 0.55 * (this.isGuarded(n.r, n.c) ? 0.3 : 1);
-          if (Math.random() < chance) { e.eating = 1.1; e.eatCell = { r: n.r, c: n.c }; }
+        let t = e.next;
+        if (!t || (!this.passable(t) && t.t !== 'hive')) {
+          const h = fromWorld(e.x, e.y), cur = this.tile(h.q, h.r);
+          t = cur && cur.dist < Infinity ? cur : this.nb(cur || this.hive).filter(n => n.dist < Infinity).sort((a, b) => a.dist - b.dist)[0];
+          e.next = t;
         }
+        const dx = t.x - e.x, dy = t.y - e.y, d = Math.hypot(dx, dy);
+        if (d < 0.05 || d < spd) {
+          e.x = t.x; e.y = t.y;
+          const opts = this.nb(t).filter(n => n.dist < t.dist);
+          if (opts.length) e.next = pick(opts);
+        } else { e.x += dx / d * spd; e.y += dy / d * spd; }
       }
+      if (Math.abs(e.x - ox) > 0.002) e.flip = e.x < ox ? -1 : 1;
 
-      if (e.d >= last) {
-        e.dead = true; e.reached = true;
-        s.hearts -= e.barnDmg;
-        this.floater(e.x, e.y - 0.3, `-${e.barnDmg}❤️`, '#ff6b6b');
-        this.shake = 0.3;
-        sfx('hurt');
+      // Arrivée à la ruche
+      if (Math.hypot(e.x, e.y) < 0.45) {
+        e.dead = true;
+        s.hiveHp -= base.dmg; const stolen = Math.min(s.honey, base.steal); s.honey -= stolen;
+        this.chief.report(e.sector, 1 + stolen / 10);
+        this.floater(0, -0.5, `-${base.dmg}❤️ -${Math.round(stolen)}🍯`, '#ff6b6b'); this.shake = 0.3; sfx('hurt');
         this.emit('change');
-        if (s.hearts <= 0) { s.hearts = 0; return this.gameOver(); }
+        if (s.hiveHp <= 0) { s.hiveHp = 0; return this.gameOver(); }
       }
     }
-    // Fin de vie : on transmet la "fitness" à l'Essaim.
-    this.enemies = this.enemies.filter(e => {
-      if (!e.dead) return true;
-      if (e.idx >= 0) {
-        const prog = clamp(e.d / last, 0, 1);
-        this.swarm.recordFitness(e.sp, e.idx, prog + 0.4 * e.eaten + (e.reached ? 1.5 : 0));
-      }
-      return false;
-    });
+    this.enemies = this.enemies.filter(e => !e.dead);
   }
 
-  hurt(e, amount, type, dot = false) {
+  hurt(e, dmg, dot = false) {
     if (e.dead) return;
-    let a = amount * (1 - (e.res[type] || 0));
-    if (type === 'phys') a = Math.max(a * 0.25, a - e.armor);
-    if (type === 'expl') a = Math.max(a * 0.4, a - e.armor * 0.5);
-    this.swarm.recordDamage(type, a);
-    e.hp -= a;
-    if (!dot) e.flash = 0.08;
+    dmg = dot ? dmg * (1 - Math.min(0.6, e.armor * 0.1)) : Math.max(dmg * 0.3, dmg - e.armor);
+    e.hp -= dmg; if (!dot) e.flash = 0.08;
     if (e.hp <= 0) {
       e.dead = true;
-      this.s.coins += e.reward; this.s.stats.kills++;
-      this.floater(e.x, e.y - 0.3, `+${e.reward}🪙`, '#ffe066');
-      this.puff(e.x, e.y, e.boss ? '#a0522d' : '#9be37a', e.boss ? 24 : 8);
-      sfx('kill');
+      const base = ENEMIES[e.sp];
+      this.chief.report(e.sector, 0.5 * Math.max(0, 1 - Math.hypot(e.x, e.y) / e.start));
+      this.addHoney(base.reward); this.s.stats.kills++;
+      this.floater(e.x, e.y - 0.25, `+${base.reward}🍯`, '#ffd166', 1);
+      this.puff(e.x, e.y, base.boss ? '#8d5524' : '#b5e48c', base.boss ? 26 : 9); sfx('kill');
       this.emit('change');
     }
   }
 
-  targetsInRange(x, y, range, air) {
-    return this.enemies.filter(e => !e.dead && e.d > -0.3 && (air || !e.flying) && Math.hypot(e.x - x, e.y - y) <= range);
-  }
-
-  updateTowers(dt) {
-    const s = this.s;
-    this.forCells((cell, r, c) => {
-      const t = cell.tower; if (!t) return;
-      const def = TOWERS[t.id]; if (!def.rate) return;
-      t.cd -= dt;
-      if (t.cd > 0) return;
-      const x = c + 0.5, y = r + 0.5, range = def.range[t.lvl];
-      const tg = this.targetsInRange(x, y, range, def.hitsAir);
-      if (!tg.length) return;
-      if (def.ammo) {
-        if (t.shots <= 0) {
-          if (s.stock[def.ammo] > 0) { s.stock[def.ammo]--; t.shots += def.perAmmo; t.noAmmo = false; this.emit('change'); }
-          else { t.noAmmo = true; t.cd = 0.5; return; }
+  updateDefenses(dt) {
+    this.forTiles(t => {
+      const d = t.def; if (!d) return;
+      const def = DEFENSES[d.id];
+      if (d.id === 'thistle') {
+        for (const e of this.enemies) if (!e.flying && Math.hypot(e.x - t.x, e.y - t.y) < def.range[d.lvl]) this.hurt(e, def.dps[d.lvl] * dt, true);
+      } else if (d.id === 'jar') {
+        d.cd -= dt; if (d.cd > 0) return;
+        let best = null, bd = Infinity;
+        for (const e of this.enemies) {
+          if (Math.hypot(e.x - t.x, e.y - t.y) > def.range[d.lvl]) continue;
+          const h = Math.hypot(e.x, e.y); if (h < bd) { bd = h; best = e; }
         }
-        t.shots--;
-      }
-      t.cd = def.rate[t.lvl];
-      tg.sort((a, b) => b.d - a.d);
-      const target = tg[0];
-      t.ang = Math.atan2(target.y - y, target.x - x);
-      let dmg = def.dmg[t.lvl];
-
-      if (t.id === 'seeder') {
-        this.projectiles.push({ k: 'seed', x, y, target, spd: 9, dmg, type: 'phys' });
+        if (!best) return;
+        d.cd = def.rate[d.lvl]; d.ang = Math.atan2(best.y - t.y, best.x - t.x);
+        this.shots.push({ x: t.x, y: t.y - 0.15, target: best, dmg: def.dmg[d.lvl] });
         sfx('shoot');
-      } else if (t.id === 'flamer') {
-        for (const e of tg) { this.hurt(e, dmg, 'fire'); e.burn = { t: 2, dps: dmg * 0.4 }; }
-        for (let i = 0; i < 14; i++) {
-          const a = rand(0, Math.PI * 2), v = rand(0.6, 1.8) * range;
-          this.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.45, max: 0.45, color: pick(['#ff6a00', '#ffb347', '#ff3d2e']), size: rand(0.06, 0.12) });
-        }
-        sfx('flame');
-      } else if (t.id === 'catapult') {
-        const lead = this.posAt(target.d + target.speed * (1 - target.slow) * 0.8);
-        this.projectiles.push({ k: 'pumpkin', sx: x, sy: y, tx: lead.x, ty: lead.y, t: 0, dur: 0.8, dmg, splash: def.splash, x, y });
-      } else if (t.id === 'hive') {
-        let boost = 0;
-        for (const n of neighbors(s.grid, r, c, true)) if (n.cell.crop?.id === 'sunflower' && n.cell.crop.g >= 1) boost++;
-        dmg *= 1 + 0.35 * boost;
-        this.projectiles.push({ k: 'bee', x: x + rand(-0.2, 0.2), y: y - 0.2, target, spd: 5, dmg, type: 'poison', ph: Math.random() * 6 });
       }
     });
-  }
-
-  updateProjectiles(dt) {
-    for (const p of this.projectiles) {
-      if (p.k === 'pumpkin') {
-        p.t += dt / p.dur;
-        p.x = p.sx + (p.tx - p.sx) * p.t; p.y = p.sy + (p.ty - p.sy) * p.t;
-        if (p.t >= 1) {
-          p.done = true;
-          for (const e of this.targetsInRange(p.tx, p.ty, p.splash, false)) this.hurt(e, p.dmg, 'expl');
-          for (let i = 0; i < 20; i++) {
-            const a = rand(0, Math.PI * 2), v = rand(0.5, 2.5);
-            this.particles.push({ x: p.tx, y: p.ty, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6, max: 0.6, color: pick(['#ff9f1c', '#ffbf69', '#6b4226']), size: rand(0.05, 0.12) });
-          }
-          this.shake = Math.max(this.shake || 0, 0.12);
-          sfx('boom');
-        }
-        continue;
-      }
-      const e = p.target;
-      if (e.dead) { p.done = true; continue; }
-      const dx = e.x - p.x, dy = e.y - p.y, dist = Math.hypot(dx, dy);
-      if (dist < 0.18) {
-        p.done = true;
-        this.hurt(e, p.dmg, p.type);
-        if (p.k === 'bee') e.poison = { t: 3, dps: p.dmg * 0.6 };
-        continue;
-      }
-      let vx = dx / dist * p.spd, vy = dy / dist * p.spd;
-      if (p.k === 'bee') { p.ph += dt * 14; vx += Math.cos(p.ph) * 2; vy += Math.sin(p.ph) * 2; }
-      p.x += vx * dt; p.y += vy * dt;
+    for (const p of this.shots) {
+      const e = p.target; if (e.dead) { p.done = true; continue; }
+      const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy);
+      if (d < 0.15) { p.done = true; this.hurt(e, p.dmg); e.slowT = 1.5; e.slowA = Math.max(e.slowA || 0, DEFENSES.jar.slow); this.puff(e.x, e.y, '#c77d2a', 5); sfx('hit'); continue; }
+      p.x += dx / d * 6 * dt; p.y += dy / d * 6 * dt;
     }
-    this.projectiles = this.projectiles.filter(p => !p.done);
+    this.shots = this.shots.filter(p => !p.done);
   }
 
-  updateRobots(dt) {
-    const s = this.s;
-    const reserved = new Set(s.robots.filter(r => r.target).map(r => r.target.r + ',' + r.target.c));
-    for (const rb of s.robots) {
-      if (!rb.target) {
-        // IA utilitaire : chaque action candidate reçoit un score valeur/distance.
-        let best = null, bestScore = 0;
-        this.forCells((cell, r, c) => {
-          if (reserved.has(r + ',' + c) || cell.t !== 'g') return;
-          const dist = Math.hypot(c + 0.5 - rb.x, r + 0.5 - rb.y);
-          let score = 0, act = null;
-          if (cell.crop && cell.crop.g >= 1 && s.stock[CROPS[cell.crop.id].item] < this.cap()) {
-            score = 3 / (dist + 1); act = 'harvest';
-          } else if (!cell.crop && !cell.tower && cell.last && s.autoReplant && s.coins >= CROPS[cell.last].cost + 15) {
-            score = 1.6 / (dist + 1); act = 'plant';
-          }
-          if (score > bestScore) { bestScore = score; best = { r, c, act }; }
-        });
-        if (best) { rb.target = best; reserved.add(best.r + ',' + best.c); }
-        else { rb.y += Math.sin(this.time * 2 + rb.x) * 0.002; continue; }
-      }
-      const tx = rb.target.c + 0.5, ty = rb.target.r + 0.5;
-      const dx = tx - rb.x, dy = ty - rb.y, dist = Math.hypot(dx, dy);
-      if (dist > 0.05) {
-        const step = Math.min(dist, 2.4 * dt);
-        rb.x += dx / dist * step; rb.y += dy / dist * step;
-        rb.flip = dx < 0 ? -1 : 1;
-      } else {
-        rb.work += dt;
-        if (rb.work > 0.5) {
-          rb.work = 0;
-          const { r, c, act } = rb.target;
-          const cell = this.cell(r, c);
-          if (act === 'harvest' && cell.crop?.g >= 1) this.harvest(r, c, true);
-          else if (act === 'plant' && !cell.crop && !cell.tower && cell.last && s.coins >= CROPS[cell.last].cost) {
-            s.coins -= CROPS[cell.last].cost; cell.crop = { id: cell.last, g: 0 }; this.puff(c + 0.5, r + 0.5, '#7a4a2a', 5); this.emit('change');
-          }
-          rb.target = null;
-        }
-      }
-    }
-  }
-
-  updateFx(dt) {
-    for (const p of this.particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.92; p.vy *= 0.92; p.life -= dt; }
+  fx(dt) {
+    for (const p of this.particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.9; p.vy *= 0.9; p.life -= dt; }
     this.particles = this.particles.filter(p => p.life > 0);
-    for (const f of this.floaters) { f.y -= dt * 0.7; f.life -= dt; }
+    for (const f of this.floaters) { f.y -= dt * 0.6; f.life -= dt; }
     this.floaters = this.floaters.filter(f => f.life > 0);
     if (this.shake) this.shake = Math.max(0, this.shake - dt);
+    if (this.hivePulse) this.hivePulse = Math.max(0, this.hivePulse - dt);
   }
-
   puff(x, y, color, n) {
-    for (let i = 0; i < n; i++) {
-      const a = rand(0, Math.PI * 2), v = rand(0.4, 1.6);
-      this.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.5, life: 0.5, max: 0.5, color, size: rand(0.04, 0.09) });
-    }
+    for (let i = 0; i < n; i++) { const a = rand(0, 7), v = rand(0.3, 1.5); this.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.3, life: 0.5, max: 0.5, color, size: rand(0.03, 0.07) }); }
   }
-  floater(x, y, text, color) { this.floaters.push({ x, y, text, color, life: 1.2 }); }
+  floater(x, y, text, color, life = 1.2) { this.floaters.push({ x, y, text, color, life }); }
 
   gameOver() {
-    const s = this.s;
-    s.phase = 'over';
-    const nights = s.day - 1;
-    let best = this.best();
-    if (nights > best) { best = nights; try { localStorage.setItem(BEST_KEY, best); } catch { } }
-    this.clearSave();
-    this.emit('gameOver', { nights, best, stats: s.stats });
+    const s = this.s; s.phase = 'over';
+    const waves = s.wave - 1;
+    let best = this.best(); if (waves > best) { best = waves; try { localStorage.setItem(BEST_KEY, best); } catch { } }
+    try { localStorage.removeItem(SAVE_KEY); } catch { }
+    this.emit('gameOver', { waves, best, stats: s.stats });
   }
 
-  // ---------- Entrées tactiles ----------
+  // ---------- Entrées ----------
   bindInput() {
-    const cv = this.cv;
-    let down = false, moved = false, startTile = null, visited = new Set();
-    const tileAt = (ev) => {
-      const rect = cv.getBoundingClientRect();
-      const x = (ev.clientX - rect.left - this.ox) / this.T, y = (ev.clientY - rect.top - this.oy) / this.T;
-      const c = Math.floor(x), r = Math.floor(y);
-      return r >= 0 && r < ROWS && c >= 0 && c < COLS ? { r, c } : null;
-    };
-    cv.addEventListener('pointerdown', (ev) => {
+    this.cv.addEventListener('pointerdown', (ev) => {
       if (!this.s || this.s.phase === 'over' || this.paused) return;
-      down = true; moved = false; visited.clear();
-      startTile = tileAt(ev);
-      if (startTile) { visited.add(startTile.r + ',' + startTile.c); this.tapCell(startTile.r, startTile.c); }
-      try { cv.setPointerCapture(ev.pointerId); } catch { }
+      const r = this.cv.getBoundingClientRect();
+      const x = (ev.clientX - r.left - this.cx) / this.U, y = (ev.clientY - r.top - this.cy) / this.U;
+      const h = fromWorld(x, y);
+      this.tap(this.tile(h.q, h.r));
     });
-    cv.addEventListener('pointermove', (ev) => {
-      if (!down) return;
-      const t = tileAt(ev); if (!t) return;
-      const k = t.r + ',' + t.c;
-      if (visited.has(k)) return;
-      visited.add(k); moved = true;
-      // Glisser = récolte en chaîne, ou plantation/pose en chaîne avec un outil.
-      const cell = this.cell(t.r, t.c);
-      if (!this.tool) { if (cell.crop?.g >= 1) this.harvest(t.r, t.c); }
-      else if (this.tool.kind !== 'tower') this.tapCell(t.r, t.c);
-    });
-    const up = () => { down = false; };
-    cv.addEventListener('pointerup', up);
-    cv.addEventListener('pointercancel', up);
   }
 
   // ---------- Rendu ----------
   resize() {
     const dpr = this.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    const rect = this.cv.parentElement.getBoundingClientRect();
-    this.W = rect.width; this.H = rect.height;
+    const r = this.cv.parentElement.getBoundingClientRect();
+    this.W = r.width; this.H = r.height;
     this.cv.width = Math.round(this.W * dpr); this.cv.height = Math.round(this.H * dpr);
     this.cv.style.width = this.W + 'px'; this.cv.style.height = this.H + 'px';
-    this.T = Math.floor(Math.min(this.W / COLS, this.H / ROWS));
-    this.ox = Math.floor((this.W - this.T * COLS) / 2);
-    this.oy = Math.floor((this.H - this.T * ROWS) / 2);
+    const w = 2 * RADIUS + 1 + 0.8, h = 2 * RADIUS * 0.866 + 2 * HEXR + 1.8;
+    this.U = Math.min(this.W / w, this.H / h);
+    this.cx = this.W / 2; this.cy = this.H / 2;
     if (this.s) this.buildTerrain();
   }
 
-  // Le terrain statique est pré-rendu dans un canvas hors-écran.
+  hexPath(g, x, y, rad) {
+    g.beginPath();
+    for (let i = 0; i < 6; i++) { const a = (60 * i - 30) * Math.PI / 180; const px = x + Math.cos(a) * rad, py = y + Math.sin(a) * rad; i ? g.lineTo(px, py) : g.moveTo(px, py); }
+    g.closePath();
+  }
+
   buildTerrain() {
-    if (!this.T) return;
-    const T = this.T, dpr = this.dpr, s = this.s;
+    if (!this.U) return;
+    const U = this.U, dpr = this.dpr;
     const off = this.terrain || (this.terrain = document.createElement('canvas'));
     off.width = Math.round(this.W * dpr); off.height = Math.round(this.H * dpr);
     const g = off.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // Fond : lisière de forêt
-    const bg = g.createLinearGradient(0, 0, 0, this.H);
-    bg.addColorStop(0, '#3f7d4a'); bg.addColorStop(1, '#5d9c52');
+    const bg = g.createRadialGradient(this.cx, this.cy, U, this.cx, this.cy, Math.max(this.W, this.H) * 0.7);
+    bg.addColorStop(0, '#d8eeb0'); bg.addColorStop(1, '#8fbf6a');
     g.fillStyle = bg; g.fillRect(0, 0, this.W, this.H);
-    g.translate(this.ox, this.oy);
-    let seed = 7;
-    const srand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-      g.fillStyle = (r + c) % 2 ? '#8fd16a' : '#86c862';
-      g.fillRect(c * T, r * T, T, T);
-      for (let i = 0; i < 3; i++) {
-        g.fillStyle = 'rgba(60,120,40,0.35)';
-        const x = c * T + srand() * T, y = r * T + srand() * T;
-        g.fillRect(x, y, 1.5, T * 0.08);
-      }
-      if (srand() < 0.12) { g.fillStyle = pick(['#fff', '#ffd6e8', '#fff3a3']); g.beginPath(); g.arc(c * T + srand() * T, r * T + srand() * T, T * 0.035, 0, 7); g.fill(); }
+    // herbes décoratives hors carte
+    let seed = 3; const sr = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 90; i++) {
+      const x = sr() * this.W, y = sr() * this.H;
+      if (Math.hypot(x - this.cx, y - this.cy) < (RADIUS + 0.6) * U) continue;
+      g.strokeStyle = 'rgba(70,120,50,0.35)'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x - 2, y - U * 0.18); g.moveTo(x + 3, y); g.lineTo(x + 4, y - U * 0.14); g.stroke();
     }
-    // Chemin
-    const pts = s.path.map(p => [(p.c + 0.5) * T, (p.r + 0.5) * T]);
-    pts.unshift([pts[0][0], -T]);
-    const stroke = (w, col) => {
-      g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round';
-      g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke();
-    };
-    stroke(T * 0.86, '#b58a57'); stroke(T * 0.74, '#dcbc85'); stroke(T * 0.3, 'rgba(255,240,200,0.25)');
-    for (let i = 1; i < pts.length; i++) for (let k = 0; k < 2; k++) {
-      g.fillStyle = 'rgba(140,100,60,0.5)';
-      g.beginPath(); g.arc(pts[i][0] + (srand() - 0.5) * T * 0.5, pts[i][1] + (srand() - 0.5) * T * 0.5, T * 0.03, 0, 7); g.fill();
-    }
-    // Eau et rochers
-    this.forCells((cell, r, c) => {
-      const x = c * T, y = r * T;
-      if (cell.t === 'w') {
-        g.fillStyle = '#4aa3d8'; roundRect(g, x + T * 0.06, y + T * 0.06, T * 0.88, T * 0.88, T * 0.35); g.fill();
-        g.fillStyle = '#7cc8f0'; roundRect(g, x + T * 0.14, y + T * 0.12, T * 0.72, T * 0.6, T * 0.3); g.fill();
-        g.fillStyle = '#3aa35a'; g.beginPath(); g.ellipse(x + T * 0.7, y + T * 0.65, T * 0.12, T * 0.07, 0.3, 0, 7); g.fill();
-      } else if (cell.t === 'r') {
-        g.fillStyle = 'rgba(0,0,0,0.15)'; g.beginPath(); g.ellipse(x + T / 2, y + T * 0.72, T * 0.36, T * 0.12, 0, 0, 7); g.fill();
-        g.fillStyle = '#9aa0a6'; g.beginPath(); g.ellipse(x + T * 0.45, y + T * 0.52, T * 0.32, T * 0.24, -0.2, 0, 7); g.fill();
-        g.fillStyle = '#b9bfc5'; g.beginPath(); g.ellipse(x + T * 0.4, y + T * 0.45, T * 0.18, T * 0.12, -0.2, 0, 7); g.fill();
-        g.fillStyle = '#868b90'; g.beginPath(); g.ellipse(x + T * 0.72, y + T * 0.62, T * 0.14, T * 0.12, 0, 0, 7); g.fill();
+    g.translate(this.cx, this.cy);
+    const R = HEXR * U;
+    for (const t of this.s.tiles) {
+      const x = t.x * U, y = t.y * U;
+      const top = t.t === 'water' ? '#6cc3e8' : t.t === 'rock' ? '#b7b0a2' : t.t === 'hive' ? '#f2c14e' : ((t.q * 7 + t.r * 3) & 1 ? '#a9d97a' : '#b3df84');
+      const side = t.t === 'water' ? '#3f8fb8' : t.t === 'rock' ? '#857e72' : t.t === 'hive' ? '#c48a1c' : '#77a94e';
+      g.fillStyle = side; this.hexPath(g, x, y + U * 0.09, R * 0.95); g.fill();
+      g.fillStyle = top; this.hexPath(g, x, y, R * 0.95); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1.2; this.hexPath(g, x, y, R * 0.9); g.stroke();
+      if (t.t === 'g' && sr() < 0.5) { g.fillStyle = 'rgba(80,140,50,0.35)'; for (let k = 0; k < 3; k++) g.fillRect(x + (sr() - 0.5) * R, y + (sr() - 0.5) * R, 1.5, U * 0.08); }
+      if (t.t === 'rock') {
+        g.fillStyle = '#9a9387'; g.beginPath(); g.ellipse(x, y + U * 0.05, R * 0.55, R * 0.38, 0, 0, 7); g.fill();
+        g.fillStyle = '#cfc8ba'; g.beginPath(); g.ellipse(x - R * 0.12, y - U * 0.02, R * 0.3, R * 0.18, -0.3, 0, 7); g.fill();
       }
-    });
-    // Arbres de la forêt autour de l'entrée
-    const p0 = s.path[0];
-    for (const dc of [-1, 1]) {
-      const c = p0.c + dc;
-      if (c >= 0 && c < COLS && s.grid[0][c].t === 'g') {
-        const sp = emojiSprite('🌲', T * 0.75, dpr);
-        g.drawImage(sp, (c + 0.5) * T - sp.logical / 2, 0.35 * T - sp.logical / 2, sp.logical, sp.logical);
-      }
+      if (t.t === 'water') { g.fillStyle = '#4caf6a'; g.beginPath(); g.ellipse(x + R * 0.35, y + R * 0.25, R * 0.2, R * 0.12, 0.4, 0, 7); g.fill(); }
     }
-    // Grange
-    const b = s.path[s.path.length - 1];
-    drawBarn(g, (b.c + 0.5) * T, (b.r + 0.55) * T, T);
+  }
+
+  drawBee(c, x, y, s, flip, ph, guard) {
+    const U = this.U, k = s * U;
+    c.save(); c.translate(x * U, y * U); c.scale(flip, 1);
+    const w = Math.abs(Math.sin(ph)) * 0.6 + 0.4;
+    c.fillStyle = 'rgba(255,255,255,0.75)';
+    c.beginPath(); c.ellipse(-k * 0.15, -k * 0.55, k * 0.45, k * 0.28 * w, -0.4, 0, 7); c.fill();
+    c.beginPath(); c.ellipse(k * 0.2, -k * 0.55, k * 0.4, k * 0.25 * w, 0.4, 0, 7); c.fill();
+    c.fillStyle = guard ? '#ff9f1c' : '#ffd23f';
+    c.beginPath(); c.ellipse(0, 0, k * 0.75, k * 0.5, 0, 0, 7); c.fill();
+    c.fillStyle = '#2b2118';
+    c.fillRect(-k * 0.2, -k * 0.48, k * 0.18, k * 0.96); c.fillRect(-k * 0.55, -k * 0.38, k * 0.14, k * 0.76);
+    c.beginPath(); c.arc(k * 0.62, -k * 0.05, k * 0.28, 0, 7); c.fill();
+    if (guard) { c.fillStyle = '#c1121f'; c.beginPath(); c.moveTo(-k * 0.75, 0); c.lineTo(-k * 1.05, k * 0.08); c.lineTo(-k * 0.75, k * 0.16); c.fill(); }
+    c.restore();
+  }
+  drawHornet(c, x, y, flip, ph) {
+    const U = this.U, k = 0.3 * U;
+    c.save(); c.translate(x * U, y * U); c.scale(flip, 1);
+    const w = Math.abs(Math.sin(ph * 3)) * 0.6 + 0.4;
+    c.fillStyle = 'rgba(230,230,255,0.7)';
+    c.beginPath(); c.ellipse(-k * 0.1, -k * 0.5, k * 0.55, k * 0.22 * w, -0.5, 0, 7); c.fill();
+    c.beginPath(); c.ellipse(k * 0.2, -k * 0.5, k * 0.5, k * 0.2 * w, 0.3, 0, 7); c.fill();
+    c.fillStyle = '#e07a1f'; c.beginPath(); c.ellipse(-k * 0.35, k * 0.05, k * 0.55, k * 0.33, 0.15, 0, 7); c.fill();
+    c.fillStyle = '#3a1f0f'; for (let i = 0; i < 3; i++) c.fillRect(-k * (0.65 - i * 0.25), -k * 0.28, k * 0.1, k * 0.62);
+    c.fillStyle = '#5a2e12'; c.beginPath(); c.ellipse(k * 0.25, -k * 0.02, k * 0.3, k * 0.24, 0, 0, 7); c.fill();
+    c.fillStyle = '#f4a259'; c.beginPath(); c.arc(k * 0.6, -k * 0.05, k * 0.22, 0, 7); c.fill();
+    c.fillStyle = '#d00000'; c.beginPath(); c.arc(k * 0.7, -k * 0.1, k * 0.07, 0, 7); c.fill();
+    c.restore();
   }
 
   render() {
-    const ctx = this.ctx, T = this.T, dpr = this.dpr, s = this.s;
+    const c = this.ctx, U = this.U, dpr = this.dpr, s = this.s, tm = this.time;
     if (!s || !this.terrain) return;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(this.terrain, 0, 0);
-    let sx = 0, sy = 0;
-    if (this.shake) { sx = rand(-1, 1) * this.shake * 12; sy = rand(-1, 1) * this.shake * 12; }
-    ctx.setTransform(dpr, 0, 0, dpr, (this.ox + sx) * dpr, (this.oy + sy) * dpr);
-    const tm = this.time;
-    const spr = (e, px, x, y, flip = 1, alpha = 1) => {
-      const sp = emojiSprite(e, px, dpr), L = sp.logical;
-      ctx.globalAlpha = alpha;
-      if (flip < 0) { ctx.save(); ctx.translate(x, y); ctx.scale(-1, 1); ctx.drawImage(sp, -L / 2, -L / 2, L, L); ctx.restore(); }
-      else ctx.drawImage(sp, x - L / 2, y - L / 2, L, L);
-      ctx.globalAlpha = 1;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.drawImage(this.terrain, 0, 0);
+    let sx = 0, sy = 0; if (this.shake) { sx = rand(-1, 1) * this.shake * 10; sy = rand(-1, 1) * this.shake * 10; }
+    c.setTransform(dpr, 0, 0, dpr, (this.cx + sx) * dpr, (this.cy + sy) * dpr);
+    const spr = (e, px, x, y, flip = 1, a = 1) => {
+      const sp = emoji(e, px, dpr), L = sp.L; c.globalAlpha = a;
+      if (flip < 0) { c.save(); c.translate(x, y); c.scale(-1, 1); c.drawImage(sp, -L / 2, -L / 2, L, L); c.restore(); }
+      else c.drawImage(sp, x - L / 2, y - L / 2, L, L);
+      c.globalAlpha = 1;
     };
+    const R = HEXR * U;
 
-    // Reflets animés de l'eau
-    this.forCells((cell, r, c) => {
-      if (cell.t !== 'w') return;
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5;
-      const o = Math.sin(tm * 2 + r + c) * T * 0.08;
-      ctx.beginPath(); ctx.moveTo(c * T + T * 0.25 + o, r * T + T * 0.35); ctx.lineTo(c * T + T * 0.45 + o, r * T + T * 0.35); ctx.stroke();
-    });
-
-    // Cases disponibles quand un outil est sélectionné
+    // Avertissement : côté choisi par le Frelon chef
+    if (s.warn && s.phase === 'build') {
+      const pulse = 0.45 + 0.35 * Math.sin(tm * 6);
+      for (const [sec, a] of [[s.warn.main, pulse], [s.warn.second, pulse * 0.5]]) {
+        if (sec == null) continue;
+        const mid = sectorAngle(sec), rad = (RADIUS + 0.75) * U;
+        c.strokeStyle = `rgba(214,40,40,${a})`; c.lineWidth = U * 0.28; c.lineCap = 'round';
+        c.beginPath(); c.arc(0, 0, rad, mid - 0.45, mid + 0.45); c.stroke();
+        spr('⚠️', U * 0.45, Math.cos(mid) * rad, Math.sin(mid) * rad);
+      }
+    }
+    // Eau animée
+    for (const t of s.tiles) if (t.t === 'water') {
+      c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 1.5; const o = Math.sin(tm * 2 + t.q) * R * 0.15;
+      c.beginPath(); c.moveTo(t.x * U - R * 0.3 + o, t.y * U - R * 0.2); c.lineTo(t.x * U + o, t.y * U - R * 0.2); c.stroke();
+    }
+    // Cases disponibles
     if (this.tool && this.tool.kind !== 'shovel') {
-      const a = 0.18 + 0.1 * Math.sin(tm * 5);
-      this.forCells((cell, r, c) => {
-        if (cell.t === 'g' && !cell.crop && !cell.tower) {
-          ctx.fillStyle = `rgba(255,255,255,${a})`;
-          roundRect(ctx, c * T + 3, r * T + 3, T - 6, T - 6, T * 0.2); ctx.fill();
-        }
-      });
+      c.fillStyle = `rgba(255,255,255,${0.2 + 0.12 * Math.sin(tm * 5)})`;
+      for (const t of s.tiles) if (t.t === 'g' && !t.flower && !t.def) { this.hexPath(c, t.x * U, t.y * U, R * 0.8); c.fill(); }
     }
-
-    // Cultures
-    this.forCells((cell, r, c) => {
-      if (!cell.crop) return;
-      const x = c * T, y = r * T, cr = cell.crop, def = CROPS[cr.id];
-      ctx.fillStyle = '#8a5a3b'; roundRect(ctx, x + T * 0.1, y + T * 0.14, T * 0.8, T * 0.76, T * 0.18); ctx.fill();
-      ctx.strokeStyle = '#6e4329'; ctx.lineWidth = Math.max(1, T * 0.03);
-      for (let i = 1; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(x + T * 0.2, y + T * (0.14 + 0.19 * i)); ctx.lineTo(x + T * 0.8, y + T * (0.14 + 0.19 * i)); ctx.stroke(); }
-      const cx = x + T / 2, cy = y + T / 2;
-      if (cr.g < 0.3) {
-        const k = 0.4 + cr.g * 2;
-        ctx.fillStyle = '#4caf50';
-        ctx.beginPath(); ctx.ellipse(cx - T * 0.08 * k, cy, T * 0.1 * k, T * 0.05 * k, -0.6, 0, 7); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(cx + T * 0.08 * k, cy - T * 0.02, T * 0.1 * k, T * 0.05 * k, 0.6, 0, 7); ctx.fill();
-      } else if (cr.g < 1) {
-        spr(def.emoji, T * (0.35 + cr.g * 0.35), cx, cy);
-      } else {
-        const bob = Math.sin(tm * 4 + r * 1.3 + c) * T * 0.04;
-        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, T * 0.55);
-        glow.addColorStop(0, 'rgba(255,245,170,0.75)'); glow.addColorStop(1, 'rgba(255,245,170,0)');
-        ctx.fillStyle = glow; ctx.fillRect(x, y, T, T);
-        spr(def.emoji, T * 0.78, cx, cy + bob);
+    // Auras de pavot
+    for (const t of s.tiles) if (t.flower?.id === 'poppy' && t.flower.g >= 1) {
+      c.fillStyle = 'rgba(180,120,220,0.12)'; c.beginPath(); c.arc(t.x * U, t.y * U, FLOWERS.poppy.aura * U, 0, 7); c.fill();
+    }
+    // Ruche (paille tressée)
+    {
+      const p = 1 + (this.hivePulse || 0) * 0.15, k = U * 0.55 * p;
+      c.fillStyle = 'rgba(0,0,0,0.18)'; c.beginPath(); c.ellipse(0, k * 0.55, k * 1.05, k * 0.25, 0, 0, 7); c.fill();
+      for (let i = 0; i < 5; i++) {
+        const yy = k * 0.45 - i * k * 0.32, ww = k * (1 - i * 0.16);
+        c.fillStyle = i % 2 ? '#e0a526' : '#f2bf3c';
+        c.beginPath(); c.ellipse(0, yy, ww, k * 0.22, 0, 0, 7); c.fill();
+        c.strokeStyle = '#b07812'; c.lineWidth = 1; c.stroke();
       }
-      if (cr.g < 1) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(2, T * 0.06);
-        ctx.beginPath(); ctx.arc(x + T * 0.8, y + T * 0.8, T * 0.1, -Math.PI / 2, -Math.PI / 2 + cr.g * Math.PI * 2); ctx.stroke();
-      }
-    });
-
-    // Ennemis au sol
-    const drawEnemy = (e) => {
-      const base = ENEMIES[e.sp], size = T * (e.boss ? 1.0 : 0.62);
-      const bob = Math.sin(tm * 10 + e.wob) * T * 0.04;
-      const x = e.x * T, y = e.y * T - (e.flying ? T * 0.3 : 0);
-      ctx.fillStyle = 'rgba(0,0,0,0.22)';
-      ctx.beginPath(); ctx.ellipse(e.x * T, e.y * T + size * 0.32, size * 0.32, size * 0.11, 0, 0, 7); ctx.fill();
-      if (e.slow > 0) { ctx.strokeStyle = 'rgba(120,200,255,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(e.x * T, e.y * T + size * 0.3, size * 0.4, size * 0.14, 0, 0, 7); ctx.stroke(); }
-      spr(base.emoji, size, x, y + bob, -e.flip, 1);
-      if (e.flash > 0) { ctx.globalCompositeOperation = 'lighter'; spr(base.emoji, size, x, y + bob, -e.flip, 0.6); ctx.globalCompositeOperation = 'source-over'; }
-      if (e.poison) { ctx.fillStyle = 'rgba(120,220,90,0.8)'; ctx.beginPath(); ctx.arc(x + size * 0.3, y - size * 0.35 + Math.sin(tm * 6) * 3, T * 0.05, 0, 7); ctx.fill(); }
-      if (e.eating > 0) spr('💬', T * 0.3, x + size * 0.35, y - size * 0.45);
-      if (e.hp < e.maxHp) {
-        const w = size * 0.8, h = Math.max(3, T * 0.07);
-        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x - w / 2, y - size * 0.6, w, h);
-        ctx.fillStyle = e.boss ? '#ff5a5a' : '#7ee36a'; ctx.fillRect(x - w / 2, y - size * 0.6, w * Math.max(0, e.hp / e.maxHp), h);
-      }
-    };
-    for (const e of this.enemies) if (!e.flying) drawEnemy(e);
-
-    // Gardiens
-    this.forCells((cell, r, c) => {
-      const t = cell.tower; if (!t) return;
-      const def = TOWERS[t.id], cx = c * T + T / 2, cy = r * T + T / 2;
-      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(cx, cy + T * 0.3, T * 0.36, T * 0.12, 0, 0, 7); ctx.fill();
-      if (t.id === 'scarecrow') {
-        ctx.strokeStyle = '#7a5230'; ctx.lineWidth = T * 0.07; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(cx, cy + T * 0.3); ctx.lineTo(cx, cy - T * 0.15); ctx.stroke();
-        const sway = Math.sin(tm * 2 + c) * 0.08;
-        ctx.save(); ctx.translate(cx, cy - T * 0.02); ctx.rotate(sway);
-        ctx.beginPath(); ctx.moveTo(-T * 0.3, 0); ctx.lineTo(T * 0.3, 0); ctx.stroke();
-        ctx.fillStyle = '#d9534f'; roundRect(ctx, -T * 0.14, -T * 0.06, T * 0.28, T * 0.26, T * 0.05); ctx.fill();
-        ctx.fillStyle = '#f3d9a4'; ctx.beginPath(); ctx.arc(0, -T * 0.16, T * 0.11, 0, 7); ctx.fill();
-        ctx.restore();
-        spr('👒', T * 0.36, cx, cy - T * 0.3);
-      } else {
-        ctx.fillStyle = shade(def.color, -0.25); ctx.beginPath(); ctx.arc(cx, cy + T * 0.04, T * 0.4, 0, 7); ctx.fill();
-        ctx.fillStyle = def.color; ctx.beginPath(); ctx.arc(cx, cy, T * 0.38, 0, 7); ctx.fill();
-        ctx.fillStyle = shade(def.color, 0.3); ctx.beginPath(); ctx.arc(cx - T * 0.08, cy - T * 0.1, T * 0.16, 0, 7); ctx.fill();
-        if (t.id === 'hive') {
-          ctx.strokeStyle = shade(def.color, -0.35); ctx.lineWidth = 2;
-          for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(cx - T * 0.3, cy + i * T * 0.13); ctx.lineTo(cx + T * 0.3, cy + i * T * 0.13); ctx.stroke(); }
-          spr('🐝', T * 0.4, cx + Math.sin(tm * 6 + c) * T * 0.1, cy - T * 0.12 + Math.cos(tm * 7) * T * 0.05);
+      c.fillStyle = '#4a2c0a'; c.beginPath(); c.ellipse(0, k * 0.35, k * 0.18, k * 0.12, 0, 0, 7); c.fill();
+      const hp = s.hiveHp / hiveMaxHp(s.hiveLvl);
+      c.strokeStyle = 'rgba(0,0,0,0.15)'; c.lineWidth = U * 0.07; c.beginPath(); c.arc(0, 0, U * 0.78, 0, 7); c.stroke();
+      c.strokeStyle = hp > 0.5 ? '#52b788' : hp > 0.25 ? '#f4a261' : '#e63946';
+      c.beginPath(); c.arc(0, 0, U * 0.78, -Math.PI / 2, -Math.PI / 2 + hp * Math.PI * 2); c.stroke();
+      spr('👑', U * 0.3, 0, -k * 1.15 + Math.sin(tm * 2) * 2);
+    }
+    // Fleurs et défenses (triées par y pour la profondeur)
+    const items = s.tiles.filter(t => t.flower || t.def).sort((a, b) => a.y - b.y);
+    for (const t of items) {
+      const x = t.x * U, y = t.y * U;
+      if (t.flower) {
+        const f = t.flower, d = FLOWERS[f.id];
+        c.strokeStyle = '#4f772d'; c.lineWidth = Math.max(1.5, U * 0.04);
+        c.beginPath(); c.moveTo(x, y + R * 0.45); c.lineTo(x, y - R * 0.1 * f.g); c.stroke();
+        if (f.g < 1) {
+          c.fillStyle = '#6a994e'; c.beginPath(); c.ellipse(x - R * 0.15, y + R * 0.2, R * 0.18, R * 0.08, -0.5, 0, 7); c.ellipse(x + R * 0.15, y + R * 0.15, R * 0.18, R * 0.08, 0.5, 0, 7); c.fill();
+          if (f.g > 0.4) spr(d.emoji, U * 0.25 + U * 0.3 * f.g, x, y - R * 0.15, 1, 0.5 + f.g * 0.5);
+          c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 2.5; c.beginPath(); c.arc(x + R * 0.5, y + R * 0.4, R * 0.18, -Math.PI / 2, -Math.PI / 2 + f.g * 6.283); c.stroke();
         } else {
-          // Canon orienté vers la cible
-          ctx.save(); ctx.translate(cx, cy); ctx.rotate(t.ang);
-          ctx.fillStyle = shade(def.color, -0.45); roundRect(ctx, 0, -T * 0.07, T * 0.38, T * 0.14, T * 0.05); ctx.fill();
-          ctx.restore();
-          spr(def.icon, T * 0.44, cx, cy - T * 0.02);
+          const sway = Math.sin(tm * 2 + t.q) * 2;
+          spr(d.emoji, U * 0.62, x + sway, y - R * 0.25, 1, f.cd > 0 ? 0.7 : 1);
+          if (f.cd <= 0 && !f.res && Math.sin(tm * 3 + t.r) > 0.6) spr('✨', U * 0.22, x + R * 0.4, y - R * 0.6);
         }
       }
-      for (let i = 0; i < t.lvl; i++) spr('⭐', T * 0.2, cx - T * 0.12 + i * T * 0.24, cy + T * 0.36);
-      if (t.noAmmo) spr('❗', T * 0.32, cx + T * 0.3, cy - T * 0.35 + Math.sin(tm * 8) * 3);
-    });
-
-    // Rayon du Gardien sélectionné
-    if (this.selected) {
-      const t = this.cell(this.selected.r, this.selected.c)?.tower;
-      if (t) {
-        const range = TOWERS[t.id].range[t.lvl];
-        ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2;
-        ctx.setLineDash([6, 6]);
-        ctx.beginPath(); ctx.arc((this.selected.c + 0.5) * T, (this.selected.r + 0.5) * T, range * T, 0, 7); ctx.fill(); ctx.stroke();
-        ctx.setLineDash([]);
-      } else this.selected = null;
-    }
-
-    // Projectiles
-    for (const p of this.projectiles) {
-      if (p.k === 'seed') { ctx.fillStyle = '#6b4226'; ctx.beginPath(); ctx.ellipse(p.x * T, p.y * T, T * 0.06, T * 0.045, 0, 0, 7); ctx.fill(); }
-      else if (p.k === 'bee') {
-        ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(p.x * T, p.y * T, T * 0.05, 0, 7); ctx.fill();
-        ctx.fillStyle = '#222'; ctx.fillRect(p.x * T - 1, p.y * T - T * 0.05, 2, T * 0.1);
-      } else if (p.k === 'pumpkin') {
-        const h = Math.sin(Math.PI * p.t) * T * 1.3;
-        ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(p.x * T, p.y * T, T * 0.15, T * 0.06, 0, 0, 7); ctx.fill();
-        spr('🎃', T * 0.38, p.x * T, p.y * T - h);
+      if (t.def) {
+        const d = t.def, def = DEFENSES[d.id];
+        c.fillStyle = 'rgba(0,0,0,0.2)'; c.beginPath(); c.ellipse(x, y + R * 0.4, R * 0.55, R * 0.18, 0, 0, 7); c.fill();
+        if (d.id === 'jar') {
+          c.fillStyle = '#b5651d'; c.beginPath(); c.ellipse(x, y, R * 0.45, R * 0.5, 0, 0, 7); c.fill();
+          c.fillStyle = '#d4884a'; c.beginPath(); c.ellipse(x - R * 0.12, y - R * 0.12, R * 0.15, R * 0.22, 0, 0, 7); c.fill();
+          c.fillStyle = '#8a4b14'; c.fillRect(x - R * 0.2, y - R * 0.62, R * 0.4, R * 0.18);
+          c.fillStyle = '#e9a23b'; c.beginPath(); c.arc(x, y - R * 0.58, R * 0.14 + Math.sin(tm * 4) * 1, 0, 7); c.fill();
+        } else spr(def.emoji, U * 0.66, x, y - R * 0.15);
+        if (d.id === 'lure') { c.fillStyle = 'rgba(0,0,0,0.4)'; c.fillRect(x - R * 0.4, y + R * 0.45, R * 0.8, 4); c.fillStyle = '#ffb703'; c.fillRect(x - R * 0.4, y + R * 0.45, R * 0.8 * d.honey / 15, 4); }
+        for (let i = 0; i < d.lvl; i++) spr('⭐', U * 0.18, x - R * 0.2 + i * R * 0.4, y + R * 0.55);
       }
     }
+    // Rayon de la défense sélectionnée
+    if (this.selected?.def) {
+      const t = this.selected, r = DEFENSES[t.def.id].range[t.def.lvl];
+      c.fillStyle = 'rgba(255,255,255,0.15)'; c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 2; c.setLineDash([6, 6]);
+      c.beginPath(); c.arc(t.x * U, t.y * U, r * U, 0, 7); c.fill(); c.stroke(); c.setLineDash([]);
+    } else this.selected = null;
 
-    // Ennemis volants
-    for (const e of this.enemies) if (e.flying) drawEnemy(e);
-
-    // Robots-jardiniers
-    for (const rb of s.robots) {
-      const x = rb.x * T, y = rb.y * T - T * 0.25 + Math.sin(tm * 3 + rb.x) * T * 0.05;
-      ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.ellipse(rb.x * T, rb.y * T + T * 0.2, T * 0.2, T * 0.07, 0, 0, 7); ctx.fill();
-      spr('🤖', T * 0.5, x, y, 1);
-      if (rb.work > 0) spr('✨', T * 0.28, x + T * 0.25, y - T * 0.25);
+    // Ennemis
+    for (const e of this.enemies.filter(e => !e.flying).concat(this.enemies.filter(e => e.flying))) {
+      const base = ENEMIES[e.sp], x = e.x * U, y = e.y * U - (e.flying ? U * 0.25 : 0);
+      const size = U * (base.boss ? 0.95 : 0.5);
+      c.fillStyle = 'rgba(0,0,0,0.2)'; c.beginPath(); c.ellipse(x, e.y * U + size * 0.3, size * 0.32, size * 0.1, 0, 0, 7); c.fill();
+      if (e.slowed) { c.strokeStyle = 'rgba(190,140,255,0.8)'; c.lineWidth = 2; c.beginPath(); c.ellipse(x, e.y * U + size * 0.3, size * 0.42, size * 0.14, 0, 0, 7); c.stroke(); }
+      const bob = Math.sin(e.wob) * U * 0.03;
+      if (base.emoji) spr(base.emoji, size, x, y + bob, -e.flip, 1);
+      else this.drawHornet(c, e.x, e.y - 0.25 + bob / U, e.flip, e.wob);
+      if (e.flash > 0) { c.fillStyle = 'rgba(255,255,255,0.5)'; c.beginPath(); c.arc(x, y, size * 0.35, 0, 7); c.fill(); }
+      if (e.stopT > 0) spr('😋', U * 0.25, x + size * 0.4, y - size * 0.4);
+      if (e.hp < e.max) {
+        const w = Math.max(size * 0.8, U * 0.4), h = Math.max(3, U * 0.06);
+        c.fillStyle = 'rgba(0,0,0,0.5)'; c.fillRect(x - w / 2, y - size * 0.62, w, h);
+        c.fillStyle = base.boss ? '#e63946' : '#80ed99'; c.fillRect(x - w / 2, y - size * 0.62, w * Math.max(0, e.hp / e.max), h);
+      }
     }
-
+    // Projectiles de propolis
+    for (const p of this.shots) { c.fillStyle = '#c77d2a'; c.beginPath(); c.arc(p.x * U, p.y * U, U * 0.07, 0, 7); c.fill(); c.fillStyle = '#f2b45a'; c.beginPath(); c.arc(p.x * U - 1, p.y * U - 1, U * 0.03, 0, 7); c.fill(); }
+    // Abeilles
+    for (const b of this.foragers) {
+      if (b.state === 'idle' && Math.hypot(b.x, b.y) < 0.3) continue; // à l'intérieur de la ruche
+      this.drawBee(c, b.x, b.y - 0.12, 0.18, b.flip || 1, b.ph, false);
+      if (b.carry) { c.fillStyle = '#ffb703'; c.beginPath(); c.arc(b.x * U, (b.y - 0.05) * U, U * 0.035, 0, 7); c.fill(); }
+    }
+    for (const b of this.guards) this.drawBee(c, b.x, b.y - 0.12, 0.21, b.flip || 1, b.ph, true);
     // Particules
-    for (const p of this.particles) {
-      ctx.globalAlpha = Math.max(0, p.life / p.max);
-      ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x * T, p.y * T, p.size * T, 0, 7); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    // Nuit
-    if (this.nightAlpha > 0.01) {
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = `rgba(22,28,78,${0.42 * this.nightAlpha})`;
-      ctx.fillRect(0, 0, this.W, this.H);
-      for (let i = 0; i < 14; i++) {
-        const fx = (Math.sin(i * 12.9 + tm * 0.3) * 0.5 + 0.5) * this.W;
-        const fy = (Math.cos(i * 7.3 + tm * 0.23) * 0.5 + 0.5) * this.H;
-        const a = (Math.sin(tm * 3 + i) * 0.5 + 0.5) * this.nightAlpha;
-        ctx.fillStyle = `rgba(255,250,150,${a})`; ctx.beginPath(); ctx.arc(fx, fy, 2.2, 0, 7); ctx.fill();
-      }
-      ctx.setTransform(dpr, 0, 0, dpr, (this.ox + sx) * dpr, (this.oy + sy) * dpr);
-    }
-
+    for (const p of this.particles) { c.globalAlpha = Math.max(0, p.life / p.max); c.fillStyle = p.color; c.beginPath(); c.arc(p.x * U, p.y * U, p.size * U, 0, 7); c.fill(); }
+    c.globalAlpha = 1;
+    // Teinte crépuscule pendant les vagues
+    if (s.phase === 'wave') { c.setTransform(dpr, 0, 0, dpr, 0, 0); c.fillStyle = 'rgba(150,50,20,0.08)'; c.fillRect(0, 0, this.W, this.H); c.setTransform(dpr, 0, 0, dpr, (this.cx + sx) * dpr, (this.cy + sy) * dpr); }
     // Textes flottants
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `bold ${Math.round(T * 0.3)}px system-ui, sans-serif, ${EMOJI_FONT}`;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = `700 ${Math.round(U * 0.3)}px system-ui, sans-serif, ${EMOJI_FONT}`;
     for (const f of this.floaters) {
-      ctx.globalAlpha = Math.min(1, f.life * 1.5);
-      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-      ctx.strokeText(f.text, f.x * T, f.y * T); ctx.fillStyle = f.color; ctx.fillText(f.text, f.x * T, f.y * T);
+      c.globalAlpha = Math.min(1, f.life * 1.5); c.lineWidth = 3; c.strokeStyle = 'rgba(40,20,0,0.6)';
+      c.strokeText(f.text, f.x * U, f.y * U); c.fillStyle = f.color; c.fillText(f.text, f.x * U, f.y * U);
     }
-    ctx.globalAlpha = 1;
+    c.globalAlpha = 1;
   }
-}
-
-function roundRect(g, x, y, w, h, r) {
-  g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
-  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
-}
-function shade(hex, k) {
-  const n = parseInt(hex.slice(1), 16);
-  let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
-  const f = (v) => Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k);
-  return `rgb(${f(r)},${f(g)},${f(b)})`;
-}
-function drawBarn(g, x, y, T) {
-  const w = T * 1.05, h = T * 0.75;
-  g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(x, y + h * 0.5, w * 0.6, T * 0.12, 0, 0, 7); g.fill();
-  g.fillStyle = '#c0392b'; g.fillRect(x - w / 2, y - h * 0.3, w, h * 0.8);
-  g.fillStyle = '#8e2a1f'; g.beginPath(); g.moveTo(x - w * 0.6, y - h * 0.25); g.lineTo(x, y - h * 0.95); g.lineTo(x + w * 0.6, y - h * 0.25); g.closePath(); g.fill();
-  g.fillStyle = '#fff'; g.fillRect(x - w * 0.2, y + h * 0.02, w * 0.4, h * 0.48);
-  g.strokeStyle = '#c0392b'; g.lineWidth = T * 0.04;
-  g.beginPath(); g.moveTo(x - w * 0.2, y + h * 0.02); g.lineTo(x + w * 0.2, y + h * 0.5); g.moveTo(x + w * 0.2, y + h * 0.02); g.lineTo(x - w * 0.2, y + h * 0.5); g.stroke();
-  g.fillStyle = '#fff'; g.beginPath(); g.arc(x, y - h * 0.45, T * 0.08, 0, 7); g.fill();
 }

@@ -1,8 +1,12 @@
 {
-  "appId": "com.potagergardien.game",
-  "appName": "Potager Gardien",
+  "appId": "com.mieletdards.game",
+  "appName": "Miel & Dards",
   "webDir": "www",
-  "backgroundColor": "#5d9c52",
-  "android": { "allowMixedContent": false },
-  "ios": { "contentInset": "never" }
+  "backgroundColor": "#f2b33d",
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "never"
+  }
 }

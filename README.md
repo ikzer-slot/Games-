@@ -1,125 +1,56 @@
-# 🌻 Potager Gardien
+# 🍯 Miel & Dards
 
-> **Cultive le jour. Défends la nuit. Face à un Essaim qui apprend de toi.**
+> Fais fleurir la prairie, élève ta colonie et protège ta Reine d'un **Frelon chef qui apprend**.
 
-Jeu mobile original mêlant **farming**, **tower defense** et **gestion**, avec deux IA au cœur du gameplay.
-Portrait, tactile, 100 % hors-ligne, prêt à être publié sur **Google Play**, l'**App Store** ou en **PWA**.
+Jeu mobile original (portrait, tactile, hors-ligne) qui mélange **farming**, **tower defense** et **gestion**, avec de l'**IA au cœur du gameplay**.
 
-## 💡 L'idée originale
+## Le concept
 
-Dans la plupart des tower defense, l'argent tombe du ciel. Ici, **tes récoltes sont tes munitions** :
+Tu diriges une ruche au centre d'une prairie hexagonale.
 
-| Culture | Produit | Sert à… |
-|---|---|---|
-| 🥕 Carotte | Carottes | Vendre, honorer les commandes |
-| 🌻 Tournesol | Graines 🌰 | Munitions du **Graineur** + booste les **Ruches** voisines |
-| 🌶️ Piment | Piments | Munitions du **Brûle-piment** |
-| 🎃 Citrouille | Citrouilles | Munitions de la **Catapulte**, et très chère au marché |
+- **🌸 Farming** : tu plantes des fleurs (Pâquerette, Tulipe, Tournesol, Pavot). Une fois ouvertes, tes **butineuses** (de vraies petites abeilles autonomes) y récoltent miel 🍯 et pollen 🌼, puis la fleur se recharge.
+- **🐝 Gestion** : ta colonie est limitée. Tu répartis tes abeilles entre **butineuses** (miel), **gardiennes** (combat) et **nourrices** (pollen + miel → nouvelles abeilles). Chaque abeille mange du miel : une colonie mal gérée meurt de faim. Le miel sert aussi de monnaie pour planter, construire et agrandir la ruche.
+- **🛡️ Tower defense à 360°** : les ennemis attaquent de tous les côtés. Les marcheurs (fourmis, araignées) **contournent tes défenses** : tu peux leur tracer un labyrinthe. Les volants (frelons, papillons de nuit) foncent tout droit, et les frelons **chassent tes abeilles**. Toutes les 5 vagues, un **ours** écrase tout sur son passage.
 
-Chaque récolte pose un dilemme de gestion : **vendre** (prix dynamiques, événements du village, commandes des villageois)
-ou **garder** pour défendre la ferme la nuit ? Et où planter : près de l'eau (pousse +50 %)… ou au bord du chemin,
-là où les nuisibles grignotent ?
+Défenses : Chardon (bloque et pique), Jarre à propolis (tire et ralentit), Poste de garde (étend la patrouille des gardiennes), Leurre de miel (retient les volants). Le Pavot est à la fois une fleur et une défense : son parfum ralentit les ennemis.
 
-### Boucle de jeu
-1. **☀️ Jour** : planter, récolter (tap ou glisser le doigt), construire des Gardiens, vendre, livrer des commandes, acheter des robots.
-2. **🌙 Nuit** : l'Essaim sort de la forêt et suit le chemin jusqu'à la grange. Tes Gardiens consomment le silo.
-3. **🌅 Aube** : rapport d'évolution de l'Essaim, prime, nouveau jour. Boss 🐗 toutes les 5 nuits.
+## L'IA dans le jeu (`www/js/ai.js`)
 
-## 🤖 L'IA dans le jeu
+1. **Le Frelon chef** : un *bandit manchot* (algorithme UCB1). À chaque vague il choisit un côté d'attaque, mesure ce qu'il y gagne (dégâts, miel volé, distance parcourue) et apprend tes points faibles, tout en continuant d'explorer. Le côté visé s'allume en rouge avant la vague, et le panneau 🕵️ montre ce qu'il pense de chacun de tes flancs.
+2. **La Reine** (Pilote IA, onglet 🐝 Colonie) : un planificateur qui simule l'avenir de la colonie pour des dizaines de répartitions possibles (récolte, croissance, menace, famine) et choisit la meilleure, en expliquant son choix. En test, une colonie pilotée par la Reine tient mieux qu'une répartition fixe.
+3. **Les abeilles** : agents autonomes. Chaque butineuse choisit sa fleur selon la valeur, la distance et le danger ; les gardiennes chassent les ennemis dans leur zone.
+4. **Les ennemis au sol** suivent un champ de flux recalculé à chaque construction (on ne peut jamais bloquer complètement le chemin).
 
-### 1. L'Essaim — une IA évolutionnaire (`www/js/swarm.js`)
-Chaque espèce de nuisible possède une population de **génomes** (vigueur, vitesse, carapace, résistances physique/feu/explosion/poison, gloutonnerie).
-- Chaque nuisible envoyé mesure sa **fitness** : distance parcourue, cultures mangées, dégâts à la grange.
-- À l'aube : **sélection** des meilleurs, **croisement**, **mutation dirigée** vers les résistances aux dégâts que tu as le plus infligés.
-- Les espèces les plus efficaces sont envoyées plus souvent.
-
-➡️ Si tu ne construis que des Graineurs, l'Essaim développe une carapace. **Il faut diversifier** — et le jeu t'explique pourquoi dans le rapport de l'aube (panneau 🧬).
-
-### 2. Gaïa — l'assistante IA (`www/js/advisor.js`)
-- **Mode local (hors-ligne)** : moteur de règles qui analyse en temps réel munitions, cultures exposées, résistances de l'Essaim, prix du marché, commandes…
-- **Mode connecté (optionnel)** : Gaïa envoie un résumé de la partie à ton serveur, qui interroge **Claude** (Anthropic) pour un conseil personnalisé ou une réponse à une question libre.
-
-### 3. Robots-jardiniers — agents autonomes
-IA utilitaire : chaque robot évalue toutes les cases (valeur ÷ distance) pour choisir quoi récolter ou replanter.
-
-## 📁 Structure
+## Structure
 
 ```
-www/                 ← l'application (HTML/CSS/JS sans dépendance, sans build)
-  index.html
-  css/style.css
-  js/main.js         boucle, menu, service worker
-  js/game.js         simulation + rendu canvas
-  js/ui.js           HUD, panneaux, Gaïa
-  js/swarm.js        algorithme génétique de l'Essaim
-  js/advisor.js      Gaïa (local + Claude)
-  js/data.js         équilibrage (cultures, Gardiens, nuisibles)
-  js/map.js          génération procédurale du terrain
-  js/audio.js        sons synthétisés (WebAudio)
-  manifest.webmanifest, sw.js, icons/
-server/gaia-proxy.mjs  ← proxy Claude optionnel pour Gaïa
-capacitor.config.json  ← empaquetage natif Android / iOS
+www/            l'application (HTML/CSS/JS, sans dépendance ni build)
+  js/data.js    équilibrage (fleurs, défenses, ennemis, colonie)
+  js/hex.js     grille hexagonale
+  js/ai.js      Frelon chef (UCB1) + planificateur de la Reine
+  js/game.js    simulation + rendu canvas
+  js/ui.js      HUD, répartition de la colonie, panneaux
+  js/main.js    menu, boucle, service worker
+tools/build-single.py   version en un seul fichier HTML
+capacitor.config.json   empaquetage Android / iOS
 ```
 
-## 📦 Version en un seul fichier
+## Tester
 
-```bash
-python3 tools/build-single.py dist/potager-gardien.html
-```
-Génère un fichier HTML autonome : il suffit de l'ouvrir dans un navigateur ou de l'héberger n'importe où.
+- **Local** : `npm run dev`, puis ouvre `http://localhost:8080` (ou l'IP de ton ordinateur sur ton téléphone, même Wi-Fi).
+- **Un seul fichier** : `npm run build:single` génère `dist/miel-et-dards.html`, à ouvrir dans n'importe quel navigateur.
 
-## ▶️ Lancer en local
+## Publier sur mobile
 
-```bash
-npm run dev            # puis ouvre http://localhost:8080 (ou sur ton téléphone via l'IP locale)
-```
-N'importe quel serveur statique fonctionne (`python3 -m http.server -d www`).
+Le jeu s'empaquette avec [Capacitor](https://capacitorjs.com) :
 
-## 📱 Publier sur mobile
-
-Le jeu est empaqueté avec [Capacitor](https://capacitorjs.com) (le dossier `www/` devient une app native).
-
-### Android (Google Play)
 ```bash
 npm install
-npm run cap:add:android     # une seule fois
-npm run cap:android         # ouvre Android Studio
-```
-Dans Android Studio : *Build → Generate Signed Bundle (AAB)*, puis dépose l'AAB sur la [Play Console](https://play.google.com/console).
-Pense à verrouiller l'orientation en portrait (`android:screenOrientation="portrait"` dans `AndroidManifest.xml`).
-
-### iOS (App Store) — nécessite un Mac + Xcode
-```bash
-npm run cap:add:ios
-npm run cap:ios             # ouvre Xcode → Product → Archive → App Store Connect
+npx cap add android      # une fois
+npm run cap:android      # ouvre Android Studio → Build → Generate Signed Bundle (AAB) → Play Console
+npx cap add ios          # sur Mac
+npm run cap:ios          # ouvre Xcode → Archive → App Store Connect
 ```
 
-### PWA (sans store)
-Héberge `www/` en HTTPS (GitHub Pages, Netlify…). Le jeu est installable (« Ajouter à l'écran d'accueil ») et fonctionne hors-ligne.
-Pour le Play Store sans Capacitor, une PWA peut aussi être empaquetée en TWA avec [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap).
-
-### Checklist store
-- Icônes : `www/icons/` (192, 512, maskable 512) — régénérer en haute résolution si besoin à partir de `icon.svg`.
-- Captures d'écran portrait, description, classification PEGI 3.
-- Politique de confidentialité : voir [`PRIVACY.md`](PRIVACY.md).
-
-## ✨ Activer Gaïa connectée (Claude)
-
-```bash
-cd server
-npm install
-ANTHROPIC_API_KEY=sk-ant-... npm start      # écoute sur :8787
-```
-Dans le jeu : **⚙️ Réglages → URL** `https://ton-serveur/gaia`.
-- La clé API reste **sur le serveur**, jamais dans l'app.
-- Modèle par défaut `claude-opus-5-5` (effort `low`, réponses courtes) ; change-le avec `GAIA_MODEL`.
-- Le repli serveur automatique (`fallbacks: "default"`) est activé si le modèle refuse une requête.
-- `ALLOWED_ORIGIN` restreint le CORS ; une limite de 20 requêtes/min/IP est incluse.
-- Sans URL, ou en cas d'erreur réseau, Gaïa bascule automatiquement sur son IA locale.
-
-## 🎛️ Équilibrage
-Tout se règle dans `www/js/data.js` (coûts, dégâts, cadences, PV, vitesses) et dans `swarm.js`
-(`budget()` = puissance génétique par nuit, plafonds de résistance à 70 %).
-
-## Idées pour la suite
-Saisons (hiver = pas de croissance), météo, nouvelles cultures/Gardiens, classement en ligne, cosmétiques de ferme, mode « défi du jour » à graine fixe.
+Pense à verrouiller le mode portrait, et à préparer des captures d'écran et une politique de confidentialité (le jeu ne collecte rien : la sauvegarde reste sur l'appareil).
+On peut aussi héberger `www/` en HTTPS : c'est une PWA installable qui fonctionne hors-ligne.

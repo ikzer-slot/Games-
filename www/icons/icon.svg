@@ -1,13 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <radialGradient id="bg" cx="50%" cy="35%" r="75%"><stop offset="0" stop-color="#c9f5a8"/><stop offset=".55" stop-color="#7cc861"/><stop offset="1" stop-color="#3f7d4a"/></radialGradient>
-  </defs>
-  <rect width="512" height="512" fill="url(#bg)"/>
-  <path d="M60 470 Q180 360 256 380 T460 300" stroke="#dcbc85" stroke-width="56" fill="none" stroke-linecap="round"/>
-  <g transform="translate(256 230)">
-    <circle r="150" fill="#e7b53b"/><circle r="150" fill="none" stroke="#b8861d" stroke-width="14"/>
-    <circle cx="-40" cy="-50" r="60" fill="#f6d77a"/>
+  <defs><radialGradient id="b" cx="50%" cy="35%" r="75%"><stop offset="0" stop-color="#fff1b8"/><stop offset=".5" stop-color="#f6c453"/><stop offset="1" stop-color="#d98e10"/></radialGradient></defs>
+  <rect width="512" height="512" fill="url(#b)"/>
+  <g fill="none" stroke="#c4800f" stroke-width="10" opacity=".45">
+    <path d="M96 120l44-25 44 25v51l-44 25-44-25z"/><path d="M328 360l44-25 44 25v51l-44 25-44-25z"/><path d="M372 110l34-20 34 20v40l-34 20-34-20z"/>
   </g>
-  <text x="256" y="300" font-size="210" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji">🌻</text>
-  <text x="400" y="460" font-size="110" text-anchor="middle" font-family="Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji">🐛</text>
+  <g transform="translate(256 290)">
+    <ellipse cx="0" cy="105" rx="150" ry="22" fill="#000" opacity=".15"/>
+    <ellipse cx="0" cy="70" rx="140" ry="40" fill="#e0a526" stroke="#b07812" stroke-width="5"/>
+    <ellipse cx="0" cy="22" rx="118" ry="38" fill="#f2bf3c" stroke="#b07812" stroke-width="5"/>
+    <ellipse cx="0" cy="-24" rx="96" ry="34" fill="#e0a526" stroke="#b07812" stroke-width="5"/>
+    <ellipse cx="0" cy="-66" rx="70" ry="30" fill="#f2bf3c" stroke="#b07812" stroke-width="5"/>
+    <ellipse cx="0" cy="-100" rx="40" ry="22" fill="#e0a526" stroke="#b07812" stroke-width="5"/>
+    <ellipse cx="0" cy="62" rx="26" ry="18" fill="#4a2c0a"/>
+  </g>
+  <g transform="translate(360 150) scale(2.2)">
+    <ellipse cx="-6" cy="-14" rx="14" ry="9" fill="#fff" opacity=".85" transform="rotate(-25 -6 -14)"/>
+    <ellipse cx="8" cy="-14" rx="12" ry="8" fill="#fff" opacity=".85" transform="rotate(25 8 -14)"/>
+    <ellipse cx="0" cy="0" rx="22" ry="15" fill="#ffd23f"/>
+    <rect x="-6" y="-14" width="6" height="28" fill="#2b2118"/><rect x="-16" y="-11" width="5" height="22" fill="#2b2118"/>
+    <circle cx="18" cy="-1" r="8" fill="#2b2118"/>
+  </g>
 </svg>
