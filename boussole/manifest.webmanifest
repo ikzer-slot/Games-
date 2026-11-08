@@ -1,0 +1,15 @@
+{
+  "name": "Boussole — 2 minutes pour aller mieux",
+  "short_name": "Boussole",
+  "description": "Un geste pour dire comment tu te sens, une micro-action de 2 minutes, et une app qui apprend ce qui marche pour toi.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1222",
+  "theme_color": "#0f1222",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
