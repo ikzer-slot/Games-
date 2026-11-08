@@ -566,7 +566,8 @@
       <div class="card">
         <h2>Tes données</h2>
         <p class="small muted">Elles restent sur cet appareil. ${state.checkins.length} check-ins, ${state.sessions.length} séances, ${state.journal.length} notes.</p>
-        <button class="btn ghost" id="export">Exporter (JSON)</button>
+        <button class="btn ghost" id="export">Copier mes données (JSON)</button>
+        <textarea id="dump" readonly hidden style="margin-top:10px;min-height:120px;font-size:12px"></textarea>
         <button class="btn ghost" id="reset" style="color:var(--bad)">Tout effacer</button>
       </div>
       <div class="card">
@@ -579,15 +580,20 @@
     document.querySelectorAll('#theme button').forEach((b) => b.onclick = () => {
       state.theme = b.dataset.t; save(); applyTheme(); showSettings();
     });
-    document.getElementById('export').onclick = () => {
-      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = Object.assign(document.createElement('a'), { href: url, download: 'boussole-donnees.json' });
-      document.body.appendChild(link); link.click(); link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    document.getElementById('export').onclick = async (ev) => {
+      const json = JSON.stringify(state, null, 2);
+      const btn = ev.currentTarget;
+      try { await navigator.clipboard.writeText(json); btn.textContent = 'Copié dans le presse-papiers ✓'; }
+      catch {
+        const ta = document.getElementById('dump');
+        ta.hidden = false; ta.value = json; ta.focus(); ta.select();
+        btn.textContent = 'Sélectionne et copie le texte ci-dessous';
+      }
     };
-    document.getElementById('reset').onclick = () => {
-      if (!confirm('Effacer toutes tes données ? Cette action est définitive.')) return;
+    const reset = document.getElementById('reset');
+    let armed = false;
+    reset.onclick = () => {
+      if (!armed) { armed = true; reset.textContent = 'Appuie encore pour tout effacer'; setTimeout(() => { armed = false; reset.textContent = 'Tout effacer'; }, 4000); return; }
       state = fresh(); save(); applyTheme(); showOnboarding();
     };
   }

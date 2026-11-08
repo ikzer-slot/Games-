@@ -59,7 +59,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
   max-width: 480px;
   margin: 0 auto;
   min-height: 100%;
-  padding: calc(env(safe-area-inset-top) + 20px) 16px calc(env(safe-area-inset-bottom) + 96px);
+  padding-block: calc(env(safe-area-inset-top, 0px) + 20px) calc(env(safe-area-inset-bottom, 0px) + 96px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
 .screen { animation: in .35s ease both; }
