@@ -50,10 +50,10 @@ export interface GraphLayout {
   extent: number;
 }
 
-export const ANCHOR_RING = 95;
-const PERSON_MIN_R = 175;
-const PERSON_MAX_R = 400;
-const MIN_GAP = 34;
+export const ANCHOR_RING = 70;
+const PERSON_MIN_R = 125;
+const PERSON_MAX_R = 270;
+const MIN_GAP = 30;
 
 export function layoutGraph(myAnchors: Anchor[], links: LinkResult[], maxPeople = 40): GraphLayout {
   const visible = myAnchors.filter((a) => a.visible);
@@ -73,6 +73,11 @@ export function layoutGraph(myAnchors: Anchor[], links: LinkResult[], maxPeople 
     };
   });
 
+  // Distance relative au meilleur lien : le plus fort est toujours au plus près,
+  // quelle que soit l'échelle absolue des scores.
+  const best = top[0]?.score ?? 1;
+  const norm = (score: number) => Math.min(1, score / best);
+
   // Coordonnées polaires initiales des personnes.
   const polar = top.map((link) => {
     let sx = 0;
@@ -82,9 +87,9 @@ export function layoutGraph(myAnchors: Anchor[], links: LinkResult[], maxPeople 
       sx += Math.cos(a) * m.weight;
       sy += Math.sin(a) * m.weight;
     }
-    const jitter = ((hashString(link.candidateId) % 1000) / 1000 - 0.5) * 0.9;
+    const jitter = ((hashString(link.candidateId) % 1000) / 1000 - 0.5) * 1.3;
     const angle = Math.atan2(sy, sx) + jitter;
-    const r = PERSON_MIN_R + (1 - link.score) * (PERSON_MAX_R - PERSON_MIN_R);
+    const r = PERSON_MIN_R + (1 - norm(link.score)) * (PERSON_MAX_R - PERSON_MIN_R);
     return { angle, r };
   });
 
@@ -121,7 +126,7 @@ export function layoutGraph(myAnchors: Anchor[], links: LinkResult[], maxPeople 
     label: anonymousName(link.candidateId),
     x: Math.cos(polar[i].angle) * polar[i].r,
     y: Math.sin(polar[i].angle) * polar[i].r,
-    r: 5 + 9 * link.score,
+    r: 6 + 8 * norm(link.score),
     kind: link.matches[0].mine.kind,
   }));
 
@@ -146,6 +151,6 @@ export function layoutGraph(myAnchors: Anchor[], links: LinkResult[], maxPeople 
     }
   });
 
-  const extent = Math.max(PERSON_MIN_R, ...people.map((p) => Math.hypot(p.x, p.y) + p.r)) + 30;
+  const extent = Math.max(PERSON_MIN_R, ...people.map((p) => Math.hypot(p.x, p.y) + p.r)) + 24;
   return { anchors, people, edges, extent };
 }

@@ -129,7 +129,7 @@ const Person = memo(function Person({
       {selected ? (
         <>
           <Circle cx={node.x} cy={node.y} r={node.r + 9} fill="none" stroke={color} strokeWidth={1.5} />
-          <SvgText x={node.x} y={node.y - node.r - 14} fill={colors.text} fontSize={13} fontWeight="600" textAnchor="middle">
+          <SvgText x={node.x} y={node.y - node.r - 14} fill={colors.text} fontSize={18} fontWeight="600" textAnchor="middle">
             {node.label}
           </SvgText>
         </>
@@ -143,12 +143,12 @@ function Me() {
   useEffect(() => {
     breath.value = withRepeat(withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.sin) }), -1, true);
   }, [breath]);
-  const haloProps = useAnimatedProps(() => ({ r: 46 + breath.value * 10, opacity: 0.75 + breath.value * 0.25 }));
+  const haloProps = useAnimatedProps(() => ({ r: 36 + breath.value * 8, opacity: 0.75 + breath.value * 0.25 }));
   return (
     <G>
       <AnimatedCircle cx={0} cy={0} fill="url(#halo-me)" animatedProps={haloProps} />
-      <Circle cx={0} cy={0} r={13} fill={colors.me} />
-      <SvgText x={0} y={34} fill={colors.text} fontSize={12} fontWeight="700" textAnchor="middle">
+      <Circle cx={0} cy={0} r={11} fill={colors.me} />
+      <SvgText x={0} y={36} fill={colors.text} fontSize={16} fontWeight="700" textAnchor="middle">
         {t('graph.me')}
       </SvgText>
     </G>
@@ -269,7 +269,7 @@ export function GraphView({ layout, selectedId, onSelect, newIds, peerState, ref
               </Defs>
 
               <Stars extent={ext} />
-              {[ANCHOR_RING, 200, 290, 380].map((r) => (
+              {[ANCHOR_RING, 140, 205, 270].map((r) => (
                 <Circle key={r} cx={0} cy={0} r={r} fill="none" stroke={colors.thread} strokeOpacity={0.05} strokeWidth={1} />
               ))}
 
@@ -283,9 +283,9 @@ export function GraphView({ layout, selectedId, onSelect, newIds, peerState, ref
                   <Circle cx={a.x} cy={a.y} r={6.5} fill={colors.bg} stroke={kindColors[a.anchor.kind]} strokeWidth={2} />
                   <SvgText
                     x={a.x}
-                    y={a.y + (a.y >= -1 ? 21 : -13)}
+                    y={a.y + (a.y >= -1 ? 25 : -14)}
                     fill={kindColors[a.anchor.kind]}
-                    fontSize={10}
+                    fontSize={13}
                     fontWeight="600"
                     textAnchor="middle"
                   >

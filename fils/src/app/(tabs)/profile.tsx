@@ -31,15 +31,10 @@ export default function Profile() {
       <Text style={[font.title, font.serif, { fontSize: 26 }]}>{t('profile.title')}</Text>
 
       <SectionTitle>{t('profile.pseudo')}</SectionTitle>
-      <View style={{ flexDirection: 'row', gap: spacing(2) }}>
-        <TextInput value={pseudo} onChangeText={setPseudo} maxLength={30} style={[inputStyle, { flex: 1 }]} autoCapitalize="none" />
-        <Button
-          label={t('common.save')}
-          variant="secondary"
-          disabled={!pseudoValid || pseudo.trim() === me.pseudo}
-          onPress={() => updateProfile({ pseudo: pseudo.trim() })}
-        />
-      </View>
+      <TextInput value={pseudo} onChangeText={setPseudo} maxLength={30} style={inputStyle} autoCapitalize="none" />
+      {pseudo.trim() !== me.pseudo ? (
+        <Button label={t('common.save')} variant="secondary" disabled={!pseudoValid} onPress={() => updateProfile({ pseudo: pseudo.trim() })} />
+      ) : null}
 
       <SectionTitle>{t('profile.anchors')}</SectionTitle>
       <View style={{ gap: spacing(2) }}>
