@@ -25,7 +25,12 @@
       "output": "single"
     },
     "plugins": [
-      "expo-router"
+      [
+        "expo-router",
+        {
+          "asyncRoutes": false
+        }
+      ]
     ],
     "scheme": "fils",
     "backgroundColor": "#0E0D12",

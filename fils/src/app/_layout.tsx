@@ -2,6 +2,7 @@ import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { DialogHost } from '@/components/DialogHost';
 import { AppProvider } from '@/state/AppContext';
 import { colors } from '@/theme';
 
@@ -22,6 +23,7 @@ export default function RootLayout() {
               <Stack.Screen name="link/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
             </Stack>
+            <DialogHost />
           </AppProvider>
         </ThemeProvider>
       </SafeAreaProvider>
