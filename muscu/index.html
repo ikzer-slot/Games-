@@ -11,7 +11,7 @@
   --bg: #eceff3; --surface: #ffffff; --surface-2: #f5f7fa; --ink: #12161d; --muted: #5a6371; --line: #d3d9e1;
   --accent: #c8202f; --accent-ink: #ffffff; --accent-soft: #fbe3e5;
   --up: #17864a; --up-soft: #dcf2e5; --hold: #1d5bb8; --hold-soft: #e0eafa; --down: #a86200; --down-soft: #fbecd4;
-  --p25: #d22b3a; --p20: #2160c4; --p15: #e2ab00; --p10: #1f9a52; --p5: #e9edf2; --p125: #9aa3ae;
+  --fig: #c4cbd5; --p25: #d22b3a; --p20: #2160c4; --p15: #e2ab00; --p10: #1f9a52; --p5: #e9edf2; --p125: #9aa3ae;
   --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
   --body: "Barlow", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -21,12 +21,12 @@
   --bg: #0e1115; --surface: #171b21; --surface-2: #1d222a; --ink: #e9ecf1; --muted: #8e97a5; --line: #2a313b;
   --accent: #ff4a5b; --accent-ink: #1a0005; --accent-soft: #3a161b;
   --up: #4cd08a; --up-soft: #12301f; --hold: #6aa2ff; --hold-soft: #15243d; --down: #f0a940; --down-soft: #33240e;
-  --p5: #c9ced6; color-scheme: dark; } }
+  --p5: #c9ced6; --fig: #3a424e; color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #0e1115; --surface: #171b21; --surface-2: #1d222a; --ink: #e9ecf1; --muted: #8e97a5; --line: #2a313b;
   --accent: #ff4a5b; --accent-ink: #1a0005; --accent-soft: #3a161b;
   --up: #4cd08a; --up-soft: #12301f; --hold: #6aa2ff; --hold-soft: #15243d; --down: #f0a940; --down-soft: #33240e;
-  --p5: #c9ced6; color-scheme: dark; }
+  --p5: #c9ced6; --fig: #3a424e; color-scheme: dark; }
 
 html, body { min-height: 100%; }
 body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.45; }
@@ -97,6 +97,16 @@ main.resting { padding-bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
 .ex-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .ex-h h3 { font-size: 24px; }
 .ex-h .chip { margin-top: 4px; }
+.ex-id { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.ex-id > div { min-width: 0; display: grid; gap: 4px; justify-items: start; }
+.ex-id .chip { margin-top: 0; }
+.chip.sec { background: transparent; }
+.mfig { flex: none; width: 84px; height: 84px; background: var(--surface-2); border-radius: 8px; padding: 3px; box-sizing: border-box; }
+.mfig .n { fill: var(--line); }
+.mfig .m { fill: var(--fig); stroke: var(--surface-2); stroke-width: .6; }
+.mfig .m.on { fill: var(--accent); }
+.mfig .m.sec { fill: color-mix(in srgb, var(--accent) 30%, var(--fig)); }
+.chip.main { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .advice { border-radius: 8px; padding: 10px 12px; font-size: 14px; display: grid; gap: 2px; }
 .advice b { font-family: var(--mono); font-size: 15px; }
 .k-up { background: var(--up-soft); } .k-up .tag { color: var(--up); }
@@ -479,6 +489,49 @@ function nextSuggestions() {
   }).sort((x, y) => y.sc - x.sc).slice(0, 3);
 }
 
+
+/* ---------- Muscle figure (front + back) ---------- */
+const SECONDARY = {
+  'leg-press': ['fessiers','ischios'], squat: ['fessiers','ischios'], 'front-squat': ['fessiers'], bulgarian: ['fessiers','ischios'], lunge: ['fessiers','ischios'],
+  rdl: ['fessiers','dos'], deadlift: ['ischios','fessiers','trapèzes'], 'hip-thrust': ['ischios'], abductor: [],
+  pullup: ['biceps'], 'lat-pull': ['biceps'], 'vert-machine': ['biceps'], row: ['biceps','trapèzes'], 'db-row': ['biceps','trapèzes'], 'cable-row': ['biceps','trapèzes'], 'low-row': ['biceps','trapèzes'],
+  'face-pull': ['trapèzes'], 'rear-fly': ['trapèzes'],
+  bench: ['triceps','épaules'], 'incline-db': ['triceps','épaules'], 'chest-press': ['triceps','épaules'], dips: ['triceps','épaules'],
+  ohp: ['triceps','trapèzes'], 'db-press': ['triceps','trapèzes'], 'shoulder-press-m': ['triceps','trapèzes'], 'pec-deck': ['épaules'], fly: ['épaules'],
+};
+function muscleFig(e) {
+  const sec = SECONDARY[e.id] || [];
+  const c = m => 'm' + (m === e.muscle ? ' on' : sec.includes(m) ? ' sec' : '');
+  // left half of each view; mirrored for the right half. viewBox per view: 60 x 120
+  const half = (front) => front ? `
+    <ellipse class="${c('épaules')}" cx="17" cy="26" rx="5" ry="5.5"/>
+    <path class="${c('pectoraux')}" d="M29.5,22 L21,22.5 Q17.5,29 20.5,34.5 Q25,36 29.5,34.5 Z"/>
+    <ellipse class="${c('biceps')}" cx="13.6" cy="38" rx="3.3" ry="7"/>
+    <ellipse class="n" cx="11.6" cy="53" rx="2.7" ry="7.5"/><circle class="n" cx="10.8" cy="63" r="2.4"/>
+    <path class="n" d="M21,36 Q20,47 21.5,57 L24,57 L24,36 Z"/>
+    <path class="${c('quadriceps')}" d="M29,62 L20.5,60 Q17.5,74 20.5,88 L27,88 Q29.5,75 29,62 Z"/>
+    <ellipse class="n" cx="23.5" cy="91" rx="3.6" ry="2.6"/>
+    <ellipse class="${c('mollets')}" cx="23" cy="102" rx="3.2" ry="9"/>
+    <path class="n" d="M20,112 L26,112 L27,116 L18,116 Z"/>` : `
+    <path class="${c('trapèzes')}" d="M30,15.5 L23.5,22.5 L30,33 Z"/>
+    <ellipse class="${c('épaules')}" cx="17" cy="26" rx="5" ry="5.5"/>
+    <path class="${c('dos')}" d="M29.5,33.5 L22,24.5 Q17.5,33 20.5,43 Q24,51 29.5,53 Z"/>
+    <ellipse class="${c('triceps')}" cx="13.6" cy="38" rx="3.3" ry="7"/>
+    <ellipse class="n" cx="11.6" cy="53" rx="2.7" ry="7.5"/><circle class="n" cx="10.8" cy="63" r="2.4"/>
+    <ellipse class="${c('fessiers')}" cx="25" cy="63" rx="5.2" ry="6"/>
+    <path class="${c('ischios')}" d="M29,70 L20.5,69 Q18,80 21,89 L27,89 Q29.5,80 29,70 Z"/>
+    <ellipse class="${c('mollets')}" cx="23" cy="100" rx="3.9" ry="8"/>
+    <path class="n" d="M20,112 L26,112 L27,116 L18,116 Z"/>`;
+  const view = (front, x) => `<g transform="translate(${x},0)">
+    <circle class="n" cx="30" cy="9" r="6.5"/><rect class="n" x="27.2" y="14.5" width="5.6" height="5" rx="1.5"/>
+    ${half(front)}<g transform="translate(60,0) scale(-1,1)">${half(front)}</g>
+    ${front ? [36, 42, 48].map(y => `<rect class="${c('abdos')}" x="24.6" y="${y}" width="5" height="5.2" rx="1.4"/><rect class="${c('abdos')}" x="30.4" y="${y}" width="5" height="5.2" rx="1.4"/>`).join('')
+      : `<path class="n" d="M24.5,52 L35.5,52 L35,57 L25,57 Z"/>`}
+  </g>`;
+  const names = [e.muscle, ...sec].join(', ');
+  return `<svg class="mfig" viewBox="2 1 116 117" role="img" aria-label="Muscles travaillés : ${esc(names)}">${view(true, 0)}${view(false, 60)}</svg>`;
+}
+
 /* ---------- Plates ---------- */
 const PLATES = [[25, 'var(--p25)', 44], [20, 'var(--p20)', 44], [15, 'var(--p15)', 38], [10, 'var(--p10)', 32], [5, 'var(--p5)', 24], [2.5, 'var(--p25)', 19], [1.25, 'var(--p125)', 15]];
 function plateHTML(w) {
@@ -600,7 +653,7 @@ function vExercise(x, i) {
   const firstOpen = x.sets.find(s => !s.done);
   return `
   <article class="ex" id="ex-${i}">
-    <div class="ex-h"><div><h3>${esc(e.name)}</h3><span class="chip">${esc(e.muscle)}</span></div><button class="btn ghost small" data-act="rmex" data-x="${i}" aria-label="Retirer ${esc(e.name)}">Retirer</button></div>
+    <div class="ex-h"><div class="ex-id">${muscleFig(e)}<div><h3>${esc(e.name)}</h3><span class="row" style="gap:6px"><span class="chip main">${esc(e.muscle)}</span>${(SECONDARY[e.id] || []).map(m => `<span class="chip sec">${esc(m)}</span>`).join('')}</span></div></div><button class="btn ghost small" data-act="rmex" data-x="${i}" aria-label="Retirer ${esc(e.name)}">Retirer</button></div>
     <div class="advice ${kindClass(x.kind)}"><span class="tag">${esc(x.tag || 'Conseil')}</span><b>${esc(advice)}</b><span>${esc(x.why || '')}</span></div>
     ${e.kind === 'barbell' ? plateHTML(num((firstOpen || x.sets[x.sets.length - 1] || {}).w)) : ''}
     <div class="sets">
