@@ -227,6 +227,19 @@ body.touch #riv{min-width:150px}
 @keyframes arban{0%{opacity:0;transform:scale(1.6)}12%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:scale(.96)}}
 #bBlock{right:20px;bottom:174px;background:#2a4a8acc;border-color:#9ad0ff;display:none}
 body.touch #bBlock{display:flex}
+#fsbar{display:none;position:absolute;left:50%;bottom:9%;transform:translateX(-50%);width:min(540px,92vw);background:#1d140bee;border:2px solid #4a8a9a;border-radius:12px;padding:10px 14px;text-align:center}
+#fstitle{font-family:'Cinzel',serif;color:#9ae0ff;font-size:16px}
+#fstrack{position:relative;height:36px;margin:8px 0;background:linear-gradient(90deg,#0d2a38,#1d4a5e,#0d2a38);border:2px solid #0009;border-radius:8px;overflow:hidden}
+#fsz{position:absolute;top:0;bottom:0;background:linear-gradient(#8ef0a088,#3fae5a88);border-left:2px solid #c8ffd0;border-right:2px solid #c8ffd0}
+#fsz.on{background:linear-gradient(#b8ffc4cc,#5fd07acc)}
+#fsf{position:absolute;top:4px;transform:translateX(-50%);font-size:22px;line-height:24px;filter:drop-shadow(0 1px 2px #000)}
+#fsprog{height:10px;background:#0008;border-radius:5px;overflow:hidden;border:1px solid #0009}
+#fsprog i{display:block;height:100%;width:30%;background:linear-gradient(90deg,#ffd23d,#7bd88f)}
+#fsbar .hintl{font-size:12px;color:var(--dim);margin-top:4px}
+#fsbite{position:absolute;left:50%;top:36%;transform:translate(-50%,-50%);font-family:'Cinzel',serif;font-size:76px;font-weight:700;color:#ffe066;text-shadow:0 0 20px #ff7a2a,0 4px 8px #000;display:none;animation:pulse .2s infinite alternate}
+#fscard{position:absolute;left:50%;top:20%;transform:translateX(-50%);background:#1d140bee;border:2px solid var(--rc,#8a6238);border-radius:12px;padding:8px 18px;text-align:center;display:none;box-shadow:0 0 24px #0008;max-width:90vw}
+#fscard .nm{font-family:Cinzel;font-size:19px;color:var(--rc)}
+body.touch #fsbar{bottom:130px}
 </style></head><body>
 <canvas id="gl"></canvas>
 <div id="bubbles"></div><div id="tags"></div>
@@ -2020,15 +2033,16 @@ function renderVillage(){
  return h}
 function renderMenu(tab){
  tab=tab||'village';
- const tabs=[['village','Village'],['succes','Succès'],['aide','Aide'],['reglages','Réglages']];
+ const tabs=[['village','Village'],['carnet','Carnet'],['succes','Succès'],['aide','Aide'],['reglages','Réglages']];
  let h=`<div class="row wrap" style="justify-content:space-between"><div class="row">${tabs.map(([k,n])=>`<button class="btn tiny ${k===tab?'primary':''}" data-act="menutab" data-v="${k}">${n}</button>`).join('')}</div><button class="btn tiny" data-act="close">▶ Reprendre</button></div>`;
  if(tab==='village')h+=renderVillage();
  else if(tab==='succes')h+=renderSucces();
+ else if(tab==='carnet')h+=renderCarnet();
  else if(tab==='aide')h+=`<h2>Comment jouer</h2><div class="card small">
  <b>Se déplacer</b> : ZQSD / WASD ou flèches (Maj pour courir). Souris pour regarder (clique dans le jeu pour la capturer ; sinon, glisse la souris).<br>
  <b>Frapper</b> : clic gauche (ou touche F). <b>Parer</b> (bouclier équipé, dans l’arène) : clic droit ou R. <b>Interagir</b> : E. <b>Sac</b> : I. <b>Menu</b> : Échap ou M.<br>
  <b>Sur téléphone</b> : joystick à gauche, glisse à droite pour regarder, boutons ⚒ (frapper), ✋ (interagir) et 🛡 (parer). Le son se coupe dans Réglages.</div>
- <div class="card small"><b>Le déroulé</b><br>• Ramasse du bois mort au sol, forge une hache, abats des arbres.<br>• Forge une pioche et brise des rochers à la carrière, puis plus loin dans les mines.<br>• À l’enclume, tu forges <i>toi-même</i> : frappe au bon moment.<br>• Pose tes pièces sur les râteliers, fixe tes prix : parle aux clients qui veulent marchander.<br>• Le panneau des demandes, le four, la table à plans, le dortoir et la vitrine sont dans ta forge.<br>• Dors dans ton lit pour passer directement au lendemain.<br>• L’<b>arène</b>, à l’est, propose des vagues de morts-vivants : équipe arme et armure dans ton sac, puis sonne la cloche. Le temps s’y arrête pendant le combat.</div>`;
+ <div class="card small"><b>Le déroulé</b><br>• Ramasse du bois mort au sol, forge une hache, abats des arbres.<br>• Forge une pioche et brise des rochers à la carrière, puis plus loin dans les mines.<br>• À l’enclume, tu forges <i>toi-même</i> : frappe au bon moment.<br>• Pose tes pièces sur les râteliers, fixe tes prix : parle aux clients qui veulent marchander.<br>• Le panneau des demandes, le four, la table à plans, le dortoir et la vitrine sont dans ta forge.<br>• Dors dans ton lit pour passer directement au lendemain.<br>• L’<b>arène</b>, à l’est, propose des vagues de morts-vivants : équipe arme et armure dans ton sac, puis sonne la cloche. Le temps s’y arrête pendant le combat.<br>• Au sud du village, l’<b>étang du Saule</b> : face à l’eau, E pour lancer, clic quand le bouchon plonge, puis <b>maintiens</b> le clic pour garder le poisson dans la zone verte. Les poissons changent selon l’heure et la météo.<br>• Un <b>chien errant</b> rôde près de ta forge. Il a faim…<br>• Le <b>Carnet</b> (menu) garde tes poissons et toutes les pièces que tu as forgées.</div>`;
  else h+=`<h2>Réglages</h2><div class="card"><div class="small">Durée d’une journée</div><div class="row wrap" style="margin-top:6px">${[[240,'Courte (4 min)'],[480,'Moyenne (8 min)'],[720,'Longue (12 min)']].map(([v,n])=>`<button class="btn tiny ${DAY_LEN===v?'primary':''}" data-act="setDay" data-v="${v}">${n}</button>`).join('')}</div></div>
  <div class="card"><div class="small">Sensibilité de la souris / du doigt : <b id="sensv">${CFG.sens.toFixed(1)}</b></div><input type="range" id="sens" min="0.3" max="2.5" step="0.1" value="${CFG.sens}"></div>
  <div class="card row"><div class="grow">Son</div><button class="btn tiny" data-act="snd">${snd?'🔊 Activé':'🔈 Coupé'}</button></div>
@@ -2375,7 +2389,7 @@ function buildGrass(){
  while(n<N&&tries<N*6){tries++;
   const r=Math.random(),R=r<.65?5+Math.random()*48:r<.88?15+Math.random()*80:20+Math.random()*30;
   const a=Math.random()*6.283,x=Math.cos(a)*R+(r>.88?-45:0),z=Math.sin(a)*R*.9-10+(r>.88?-5:0);
-  if(inPath(x,z))continue;
+  if(inPath(x,z)||Math.hypot(x-POND.x,z-POND.z)<POND.r+.7)continue;
   let bad=false;for(const c of colliders){if(c.b){if(x>c.x0-.5&&x<c.x1+.5&&z>c.z0-.5&&z<c.z1+.5){bad=true;break}}}
   if(bad)continue;
   d.position.set(x,0,z);d.rotation.set(0,Math.random()*6.28,0);const s=.62+Math.random()*.7;d.scale.set(s,s*(.7+Math.random()*.7),s);d.updateMatrix();im.setMatrixAt(n,d.matrix);
@@ -2925,7 +2939,7 @@ function buildNature(){
  const ll=new THREE.PointLight(lc('#ff6a1a'),1.8,36,2);ll.position.set(50,4,-90);scene3.add(ll);
  for(let i=0;i<16;i++){const a=Math.random()*6.28,r=10+Math.random()*4;const x=Math.cos(a)*r+50,z=-96+Math.sin(a)*r*.7+10;buildRock(x,Math.min(z,-72),1+Math.random()*.5,'crater',Math.random()<.8?'minerai_orich':'charbon')}
  const pl=(t,x,z)=>{tbox(.18,2.3,.18,'wood','#5a3a1e',x,1.15,z,scene3,1.2);const l=label(t,2,.5,'#d9c28a','#3a220e','bold 28px Cinzel,serif');l.position.set(x,2.2,z+.12);scene3.add(l)};
- pl('FORÊT',-27,-2);pl('CARRIÈRE',31,-3);pl('MINE DE FER',0,-44);pl('GOUFFRE',-36,-70);pl('CRATÈRE',44,-74)}
+ pl('FORÊT',-27,-2);pl('CARRIÈRE',31,-3);pl('MINE DE FER',0,-44);pl('GOUFFRE',-36,-70);pl('CRATÈRE',44,-74);buildPond()}
 
 /* ---------- personnages ---------- */
 function makePerson(shirt,skin,hair,o){
@@ -3392,7 +3406,7 @@ function meadowTex(kind){
    else if(kind==='bluebell'){for(let i=0;i<5;i++){const y=34+i*9,x=64+(i%2?6:-6)*(1-i*.1);g.fillStyle=`hsl(${236+R()*14},55%,${54+R()*10}%)`;g.beginPath();g.ellipse(x,y,6,8,0,0,6.283);g.fill()}}
    else{petals(64,40,16,15,3,'#f5d414','#e8b410',7)}}});
  return dataTex(c,fills[kind])}
-function okSpot(x,z,inPath){if(inPath&&inPath(x,z))return false;for(const c of colliders){if(c.b&&x>c.x0-.4&&x<c.x1+.4&&z>c.z0-.4&&z<c.z1+.4)return false}return true}
+function okSpot(x,z,inPath){if(inPath&&inPath(x,z))return false;if(Math.hypot(x-POND.x,z-POND.z)<POND.r+.7)return false;for(const c of colliders){if(c.b&&x>c.x0-.4&&x<c.x1+.4&&z>c.z0-.4&&z<c.z1+.4)return false}return true}
 function buildMeadow(inPath){
  const d=new THREE.Object3D(),col=new THREE.Color(),LW=LOW;
  const spot=(f)=>{for(let k=0;k<30;k++){const r=Math.random(),R=r<.7?4+Math.random()*52:12+Math.random()*80,a=Math.random()*6.283,x=Math.cos(a)*R+(r>.9?-45:0),z=Math.sin(a)*R*.9-10;if(okSpot(x,z,inPath)){f(x,z);return true}}return false};
@@ -3540,14 +3554,14 @@ function ghost(w,h,d,x,y,z,p){return mesh(new THREE.BoxGeometry(w,h,d),new THREE
 /* ---------- initialisation ---------- */
 function initWorld(){
  initRenderer();realEnv();
- buildGround();buildForge();buildStall();buildBoard();buildDorm();buildSigns();buildVillage();dressVillage();buildNature();buildArena();buildDepot();buildGrass();initFx();initRivals();
+ buildGround();buildForge();buildStall();buildBoard();buildDorm();buildSigns();buildVillage();dressVillage();buildNature();buildArena();buildDepot();buildGrass();initFx();initRivals();initExt();
  for(let i=0;i<90;i++){const m=new THREE.Mesh(new THREE.BoxGeometry(.06,.06,.06),new THREE.MeshBasicMaterial({color:lc('#ffa040'),toneMapped:false}));m.visible=false;scene3.add(m);particles.push({m,vx:0,vy:0,vz:0,life:0,g:9})}
  const sh=['#8a5a3a','#6a7a4a','#5a6a8a','#9a6a4a','#7a4a6a','#8a7a3a','#4a7a7a'];
  for(let i=0;i<7;i++){const p=makePerson(sh[i],null,['#222','#6a4a2a','#aa8a4a','#ccc'][i%4]);p.position.set(rnd(-14,14),0,rnd(6,26));scene3.add(p);npcs.push({kind:'ambient',g:p,tx:p.position.x,tz:p.position.z,wait:rnd(0,4)})}
  buildViewmodel();
  const el=$('#compass');PLACES.forEach(pl=>{const s=document.createElement('span');s.textContent=pl.n;el.appendChild(s);pl.el=s});
  initPost();window.addEventListener('resize',resize);resize();setupInput()}
-const PLACES=[{n:'Forge',x:0,z:-9},{n:'Forêt',x:-32,z:0,max:140},{n:'Carrière',x:38,z:-6,max:140},{n:'Mine',x:0,z:-52},{n:'Gouffre',x:-36,z:-80},{n:'Cratère',x:46,z:-84},{n:'Arène',x:ARN.x,z:ARN.z,max:260}];
+const PLACES=[{n:'Forge',x:0,z:-9},{n:'Forêt',x:-32,z:0,max:140},{n:'Carrière',x:38,z:-6,max:140},{n:'Mine',x:0,z:-52},{n:'Gouffre',x:-36,z:-80},{n:'Cratère',x:46,z:-84},{n:'Arène',x:ARN.x,z:ARN.z,max:260},{n:'Étang',x:-12,z:56,max:150}];
 function resize(){const w=window.innerWidth,h=window.innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();if(typeof postResize==='function')postResize(w,h)}
 
 /* ---------- vue à la première personne ---------- */
@@ -3606,9 +3620,10 @@ function setupInput(){
   else if(e.code==='KeyF')doSwing();
   else if(e.code==='KeyI')A.bag();
   else if(e.code==='KeyM'||e.code==='Tab'){e.preventDefault();A.menu()}
-  else if(e.code==='Escape'){if(FG)cancelForge();else A.menu()}
-  else if(e.code==='Space'&&FG){e.preventDefault();doSwing()}});
- addEventListener('keyup',e=>{keys[e.code]=false});
+  else if(e.code==='Escape'){if(FG)cancelForge();else if(FISH.st)fishCancel();else A.menu()}
+  else if(e.code==='Space'&&FG){e.preventDefault();doSwing()}
+  else if(e.code==='Space'&&FISH.st){e.preventDefault();if(!e.repeat)doSwing();FISH.hold=true}});
+ addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')FISH.hold=false});
  addEventListener('blur',()=>{for(const k in keys)keys[k]=false});
  if(!isTouch){
   canvas.addEventListener('mousedown',e=>{
@@ -3625,7 +3640,7 @@ function setupInput(){
    else if(lockState.mouseDown){lockState.mouseDown.moved+=Math.abs(e.movementX)+Math.abs(e.movementY);P.yaw-=e.movementX*.004*CFG.sens;P.pitch=clamp(P.pitch-e.movementY*.004*CFG.sens,-1.45,1.45)}});
   document.addEventListener('pointerlockchange',()=>{
    const on=document.pointerLockElement===canvas;
-   if(!on&&lockState.locked&&!modal&&S&&!FG)A.menu();
+   if(!on&&lockState.locked&&!modal&&S&&!FG){if(FISH.st)fishCancel();else A.menu()}
    lockState.locked=on;if(on)lockState.drag=false;$('#lockhint').style.display=(!on&&!lockState.drag)?'block':'none'})}
  else{
   const hud=$('#touch');
@@ -3679,9 +3694,13 @@ function promptFor(t){
  if(k==='bed')return 'E : dormir jusqu’au lendemain';
  if(k==='customer'){const c=u.c;return c.state==='haggle'?`E : marchander avec ${VILL[c.cu.vi][0]}`:`${VILL[c.cu.vi][0]} regarde tes marchandises`}
  if(k==='apprentice')return `E : parler à ${u.a.n}`;
+ if(k==='pond')return fishPrompt();
+ if(k==='pondsign')return 'E : le ponton (canne, panier de poissons)';
+ if(k==='pet')return petPrompt();
  return ''}
 function tryInteract(){
  if(modal||FG||!S)return;
+ if(FISH.st){fishCancel();return}
  const t=curTarget;if(!t)return;
  const k=t.kind,u=t.o.userData;
  if(k==='branch'){const b=branches.find(x=>x.g===t.o);if(!b||!b.alive)return;b.alive=false;t.o.visible=false;const q=RI(1,2);give('bois',q);S.tot.gathered+=q;toast(`+${q} Bois (bois mort)`);sfx('tap');touch()}
@@ -3696,6 +3715,9 @@ function tryInteract(){
  else if(k==='dorm'||k==='apprentice')openPanel('team');
  else if(k==='bed')openModal(`<h2>Dormir ?</h2><p style="text-align:center">Tu passes directement au lendemain. Les clients de la journée qui reste seront perdus.</p><div class="row" style="justify-content:center"><button class="btn" data-act="close">Pas encore</button><button class="btn primary" data-act="sleepYes">Dormir</button></div>`);
  else if(k==='customer'){const c=u.c;if(c.state==='haggle'&&c.h)openHaggle(c.h);else toast(`${VILL[c.cu.vi][0]} regarde tes marchandises…`)}
+ else if(k==='pond')fishStart();
+ else if(k==='pondsign')openPanel('pond');
+ else if(k==='pet')petInteract();
  else if(k==='node')toast('Frappe avec ton outil (clic / F).')}
 
 /* ---------- coups d'outil ---------- */
@@ -3703,6 +3725,7 @@ function swingSpd(){if(!ARENA.run)return 1;const w=combatWeapon();return w?TYPES
 function doSwing(){
  if(modal||!S)return;
  if(FG){forgeStrike();return}
+ if(FISH.st){fishClick();return}
  if(swingT>0)return;
  swingT=.001;swingHit=false;swingForge=false;sfx('swing')}
 function applySwingHit(){
@@ -3877,6 +3900,7 @@ function onNewDay(){
  for(const b of branches){b.alive=true;b.g.visible=true}
  if(typeof rvReset==='function')rvReset();
  if(typeof wkNewDay==='function')wkNewDay();
+ if(typeof extNewDay==='function')extNewDay();
  P.x=0;P.z=-7.4;P.yaw=Math.PI;P.pitch=-.05;P.vx=P.vz=0;custs=[]}
 function worldUpdate(dt,running){
  updateLighting(dt);frWeather(dt);updateFx(dt);updateReal(dt);
@@ -3896,12 +3920,12 @@ function worldUpdate(dt,running){
   $('#prompt').style.opacity=0;$('#cross').className='';FG.t+=dt;const sp=.9+FG.tier*.12+Math.min(FG.i,4)*.18;
   if(!FG.fin){FG.pos+=FG.dir*sp*dt;if(FG.pos>=1){FG.pos=1;FG.dir=-1}if(FG.pos<=0){FG.pos=0;FG.dir=1}$('#fgc').style.left=`calc(${FG.pos*100}% - 3px)`}
   else{FG.fin-=dt;if(FG.fin<=0)finishForgeSession()}}
- else movePlayerAndTarget(dt);
+ else if(FISH.st)fishUpdate(dt);else movePlayerAndTarget(dt);
  // coups
  if(swingT>0){swingT+=dt/(.5/swingSpd());if(!swingHit&&swingT>.45){swingHit=true;if(!swingForge)applySwingHit()}if(swingT>=1)swingT=0}
  updateViewmodel(dt,Math.hypot(P.vx,P.vz)>.3);
  updateNodes(dt);
- arenaUpdate(dt,running);frUpdate(dt,running);rvUpdate(dt);wkUpdate(dt);syncRacks();syncCustomers(dt);syncVisitors(dt);updateBubbles();rvTags();updateCompass()}
+ arenaUpdate(dt,running);frUpdate(dt,running);rvUpdate(dt);wkUpdate(dt);syncRacks();syncCustomers(dt);syncVisitors(dt);updateBubbles();rvTags();updateCompass();extUpdate(dt)}
 function movePlayerAndTarget(dt){
  movePlayer(dt);
  curTarget=findTarget();
@@ -5234,9 +5258,388 @@ function frUpdate(dt,running){
  frMerchUpdate(dt);frThiefUpdate(dt);
  if(ARENA.run)frPkUpdate(dt)}
 
+/* ===== Nouveautés : l'étang du Saule et la pêche, le chien compagnon, le carnet du forgeron ===== */
+const POND={x:-12,z:56,r:5};
+const FISHES=[
+ {id:'gardon',n:'Gardon',r:0,v:6,s:[12,25],d:.12,c0:'#9aa6a0',h:7},
+ {id:'ablette',n:'Ablette',r:0,v:5,s:[8,18],d:.18,c0:'#cfd8dc',h:5},
+ {id:'perche',n:'Perche',r:0,v:10,s:[15,35],d:.28,c0:'#8a9a3a',h:8},
+ {id:'tanche',n:'Tanche',r:1,v:18,s:[20,45],d:.3,c0:'#5a6a2a',h:8,c:'day'},
+ {id:'truite',n:'Truite arc-en-ciel',r:1,v:26,s:[25,55],d:.42,c0:'#c88aa0',h:7,c:'rain'},
+ {id:'brochet',n:'Brochet',r:1,v:34,s:[40,95],d:.55,c0:'#6a7a4a',h:5,rod:1},
+ {id:'carpe',n:'Carpe miroir',r:2,v:55,s:[40,85],d:.5,c0:'#b08a4a',h:10,rod:1},
+ {id:'sandre',n:'Sandre',r:2,v:60,s:[35,75],d:.6,c0:'#8a8a6a',h:7,c:'night'},
+ {id:'anguille',n:'Anguille d’argent',r:2,v:72,s:[50,110],d:.72,c0:'#c0c8d0',h:3.5,c:'night',rod:1},
+ {id:'esturgeon',n:'Esturgeon',r:3,v:160,s:[90,180],d:.78,c0:'#5a6470',h:6,rod:2},
+ {id:'koi',n:'Carpe koï dorée',r:3,v:240,s:[40,70],d:.84,c0:'#ff9a2a',h:9,rod:2,c:'day'},
+ {id:'barbu',n:'Le Vieux Barbu',r:4,v:600,s:[180,260],d:.93,c0:'#3a3a30',h:9,rod:3,c:'storm'}];
+const FCOND={day:'le jour',night:'le soir',rain:'sous la pluie',storm:'les jours d’orage, ou le soir sous la pluie'};
+const RODS=[
+ {n:'Canne en noisetier'},
+ {n:'Canne en frêne',cost:{bois:12,gold:60},d:'touche plus vite, attrape brochets, carpes et anguilles.'},
+ {n:'Canne cerclée d’acier',cost:{acier:3,bois:8,gold:300},d:'zone de prise plus large, poissons rares plus fréquents.'},
+ {n:'Canne de mithril',cost:{lingot_mithril:3,gold:1200},d:'la seule qui tienne face au Vieux Barbu.'}];
+const COLR=[80,200,500,1500,4000,10000];
+const PETN=['Braise','Suie','Pépite','Tison','Biscotte','Rouille','Flamme','Enclume'];
+
+const fishData=()=>{if(!S.fishing)S.fishing={rod:0,bag:[],book:{},chest:0,junk:0,total:0};return S.fishing};
+const petD=()=>{if(!S.pet)S.pet={adopted:false,name:'',love:0,dug:0,digT:100};return S.pet};
+const FD=id=>FISHES.find(f=>f.id===id);
+const isNight=()=>S.t/DAY_LEN>.78;
+const isRain=()=>FR.wx.type==='pluie'||FR.wx.type==='orage';
+const fishPrice=c=>{const f=FD(c.id);return Math.max(1,Math.round(f.v*(.7+.6*(c.s-f.s[0])/(f.s[1]-f.s[0]))))};
+function fishOk(f){
+ if((f.rod||0)>fishData().rod)return false;
+ const c=f.c;if(!c)return true;
+ if(c==='day')return !isNight();if(c==='night')return isNight();if(c==='rain')return isRain();
+ if(c==='storm')return FR.wx.type==='orage'||(isNight()&&isRain());return true}
+function fishRoll(){
+ const fd=fishData(),r=Math.random();
+ if(r<.025+.01*fd.rod)return {junk:'coffre'};
+ if(r<.1)return {junk:Math.random()<.55?'botte':'epee'};
+ const W=[50,30,14,5,1.6],o={};
+ for(const f of FISHES)if(fishOk(f))o[f.id]=W[f.r]*(f.r>=2?1+.45*fd.rod:1)*(f.c?1.6:1);
+ return {f:FD(wpick(o))}}
+function fishHint(f){return `${RAR[f.r].n}${f.c?' · '+FCOND[f.c]:''}${f.rod?' · '+RODS[f.rod].n.toLowerCase():''}`}
+function fishIcon(f,s,unk){
+ const c=unk?'#2a2018':f.c0,glow=!unk&&f.r>=2?`filter:drop-shadow(0 0 ${f.r*2}px ${RAR[f.r].c});`:'';
+ return `<svg viewBox="0 0 48 32" width="${s}" height="${Math.round(s*2/3)}" style="flex:none;${glow}"><g stroke="#1b1208" stroke-width="1.1" stroke-linejoin="round"><path d="M3 16 L12 8 L12 24 Z" fill="${c}"/><ellipse cx="27" cy="16" rx="17" ry="${f.h}" fill="${c}"/>${unk?'':`<path d="M22 ${16-f.h*.8} Q26 16 22 ${16+f.h*.8}" stroke="#0004" fill="none" stroke-width="1.4"/><path d="M24 ${16-f.h} L29 ${11-f.h*.5} L32 ${16-f.h*.9}" fill="${c}"/>`}</g>${unk?'<text x="27" y="21" font-size="13" text-anchor="middle" fill="#a8946f">?</text>':`<circle cx="37" cy="13.5" r="2.1" fill="#fff"/><circle cx="37.6" cy="13.5" r="1.1" fill="#111"/>`}</svg>`}
+
+/* ---------- l'étang ---------- */
+function buildPond(){
+ const {x,z,r}=POND;
+ const bank=new THREE.Mesh(new THREE.CircleGeometry(r+1,48),mat('#5e4c33',{roughness:1}));bank.rotation.x=-Math.PI/2;bank.position.set(x,.03,z);bank.receiveShadow=true;scene3.add(bank);
+ const w=new THREE.Mesh(new THREE.CircleGeometry(r,56),new THREE.MeshStandardMaterial({color:lc('#2f6a80'),roughness:.05,metalness:.3,transparent:true,opacity:.93}));
+ w.rotation.x=-Math.PI/2;w.position.set(x,.07,z);w.receiveShadow=true;scene3.add(w);POND.water=w;
+ const gh=mesh(new THREE.CylinderGeometry(r-.25,r-.25,1.4,28),new THREE.MeshBasicMaterial({visible:false}),x,.7,z);gh.castShadow=false;reg(gh,'pond');
+ addCirc(x,z,r-.35);
+ // pierres de berge (on laisse le côté village dégagé pour pêcher)
+ for(let i=0;i<40;i++){const a=i/40*6.283+Math.random()*.08;if(Math.abs(a-4.712)<.5)continue;
+  const rr=r+.15+Math.random()*.4,s=.13+Math.random()*.22;
+  const m=mesh(new THREE.DodecahedronGeometry(s,0),['#8c8a84','#7a7872','#6e6c66'][i%3],x+Math.cos(a)*rr,s*.3,z+Math.sin(a)*rr);m.rotation.set(i,i*2,i*3);m.scale.y=.6}
+ // roseaux
+ const reed=mat('#6f7d3c',{roughness:.9}),cat=mat('#5a3a22',{roughness:.9});
+ for(let k=0,tries=0;k<7&&tries<60;tries++){const a=Math.random()*6.283;if(Math.abs(a-4.712)<.8)continue;k++;
+  const cx=x+Math.cos(a)*(r-.2),cz=z+Math.sin(a)*(r-.2);
+  for(let j=0;j<9;j++){const h=.8+Math.random()*.7,px=cx+rnd(-.45,.45),pz=cz+rnd(-.45,.45);
+   const st=cyl(.012,.018,h,reed,px,h/2,pz,scene3,5);st.rotation.set(rnd(-.12,.12),0,rnd(-.12,.12));st.castShadow=false;
+   if(j%3===0){const t=cyl(.03,.03,.16,cat,px,h-.02,pz,scene3,6);t.castShadow=false}}}
+ // nénuphars
+ const pad=mat('#4a7a3a',{roughness:.7});
+ for(let i=0;i<9;i++){const a=Math.random()*6.283,rr=1.2+Math.random()*(r-1.8);
+  const p=mesh(new THREE.CircleGeometry(.28+Math.random()*.16,14,.3,5.9),pad,x+Math.cos(a)*rr,.085,z+Math.sin(a)*rr);p.rotation.x=-Math.PI/2;p.rotation.z=Math.random()*6.28;p.castShadow=false;
+  if(i%3===0){const fl=sph(.06,['#f4b8d0','#fff4f0'][i%2],p.position.x,.12,p.position.z);fl.scale.y=.6;fl.castShadow=false}}
+ // saule pleureur (décor)
+ const sx=x+r+2.4,sz=z+1.5,bark=mat('#4a3622',{roughness:.95}),leaf=mat('#7a9a48',{roughness:.85});
+ const tr=cyl(.32,.45,3.6,bark,sx,1.8,sz,scene3,10);tr.rotation.z=-.08;addCirc(sx,sz,.5);
+ for(let i=0;i<14;i++){const a=i/14*6.283,rr=1.2+Math.random()*.9,h=2.2+Math.random()*1.4;
+  const b=mesh(new THREE.SphereGeometry(.9,10,8),leaf,sx+Math.cos(a)*rr,h,sz+Math.sin(a)*rr);b.scale.set(.75,1.9,.75)}
+ mesh(new THREE.SphereGeometry(1.6,12,10),leaf,sx,3.9,sz).scale.set(1.3,.75,1.3);
+ // ponton : panneau, râtelier à cannes, seau, banc
+ const px=x-1.8,pz=z-r-1.5;
+ tbox(.16,2.1,.16,'wood','#4a3220',px,1.05,pz,scene3,1.2);
+ const lb=label('ÉTANG DU SAULE',2.2,.5,'#d9c28a','#3a220e','bold 26px Cinzel,serif');lb.position.set(px,1.9,pz+.1);scene3.add(lb);
+ tbox(1.6,.1,.1,'wood','#5a3a1e',px+1.4,1.1,pz,scene3,1);for(const dx of [.7,2.1])tbox(.1,1.1,.1,'wood','#4a3220',px+dx,.55,pz,scene3,1);
+ for(let i=0;i<3;i++){const rd=cyl(.012,.02,1.7,'#8a6a3a',px+.9+i*.4,.8,pz+.32,scene3,6);rd.rotation.x=-.42}
+ const bk=cyl(.2,.16,.32,mat('#6a6e74',{metalness:.6,roughness:.5}),px+2.7,.16,pz+.2,scene3,12);
+ tbox(1.5,.08,.45,'wood','#6a4a2a',px-1.6,.45,pz-.1,scene3,1);for(const dx of [-.6,.6])tbox(.1,.45,.4,'wood','#4a3220',px-1.6+dx,.22,pz-.1,scene3,1);
+ const sg=ghost(3.4,1.9,.8,px+1,.95,pz);reg(sg,'pondsign');addBox(px+1.2,pz,3.2,.4)}
+
+/* ---------- pêche ---------- */
+const FISH={st:null,t:0,hold:false,bx:0,bz:0,catch:null,wait:5,nib:2,zp:.35,zv:0,zw:.3,fp:.5,ft:.5,ftT:.5,prog:.3,rk:0};
+let ROD=null,FLINE=null,BOB=null;const RIP=[];let ripT=2,carT=2;
+const _ft=new THREE.Vector3(),_fp=new THREE.Vector3();
+function buildRod(){
+ ROD=new THREE.Group();camera.add(ROD);ROD.position.set(.27,-.38,-.48);ROD.visible=false;
+ const piv=new THREE.Group();ROD.add(piv);piv.rotation.set(-.95,0,-.08);
+ const pole=new THREE.Mesh(new THREE.CylinderGeometry(.006,.016,1.5,8),mat('#7a5a32',{roughness:.6}));pole.position.y=.75;piv.add(pole);
+ const cork=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.22,10),mat('#b08a5a',{roughness:.9}));cork.position.y=.05;piv.add(cork);
+ const reel=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.03,14),mat('#8a8e96',{metalness:.8,roughness:.35}));reel.rotation.z=Math.PI/2;reel.position.set(.035,.2,0);piv.add(reel);
+ const hand=new THREE.Mesh(new THREE.SphereGeometry(.05,12,10),skinMat('#cf9a74'));hand.scale.set(1.1,1.4,1);piv.add(hand);
+ const tip=new THREE.Object3D();tip.position.y=1.5;piv.add(tip);ROD.userData={piv,tip};
+ const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(3*14),3));
+ FLINE=new THREE.Line(lg,new THREE.LineBasicMaterial({color:lc('#f0ede0'),transparent:true,opacity:.8}));FLINE.frustumCulled=false;FLINE.visible=false;scene3.add(FLINE);
+ BOB=new THREE.Group();sph(.06,'#d23a2a',0,0,0,BOB);const b2=sph(.05,'#f4f0e6',0,.06,0,BOB);b2.scale.y=.7;cyl(.007,.007,.12,'#222',0,.13,0,BOB,6);
+ BOB.traverse(o=>{if(o.isMesh)o.castShadow=false});BOB.visible=false;scene3.add(BOB)}
+function ripple(x,z,s){
+ const m=new THREE.Mesh(new THREE.RingGeometry(.08,.12,28),new THREE.MeshBasicMaterial({color:lc('#e4f6ff'),transparent:true,opacity:.7,depthWrite:false,side:THREE.DoubleSide}));
+ m.rotation.x=-Math.PI/2;m.position.set(x,.09,z);scene3.add(m);RIP.push({m,t:0,s:s||1})}
+function plop(v){noise(.14,.22*(v||1),700);tone(210,.12,'sine',.07*(v||1))}
+function fishPrompt(){return `E : lancer la ligne (${RODS[fishData().rod].n.toLowerCase()})`}
+function fishStart(){
+ if(ARENA.run||FG||FISH.st)return;
+ const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
+ let bx=P.x+fx*3.4,bz=P.z+fz*3.4;const dx=bx-POND.x,dz=bz-POND.z,d=Math.hypot(dx,dz)||1,m=POND.r-.7;
+ if(d>m){bx=POND.x+dx/d*m;bz=POND.z+dz/d*m}
+ const rod=fishData().rod;
+ Object.assign(FISH,{st:'cast',t:0,bx,bz,catch:null,hold:false,nib:rnd(1.2,2.6),wait:rnd(3.5,9)*(1-.12*rod)});
+ ROD.visible=true;vm.visible=false;vmL.visible=false;P.vx=P.vz=0;sfx('swing')}
+function fishCancel(silent){
+ if(!FISH.st)return;FISH.st=null;FISH.hold=false;
+ if(ROD)ROD.visible=false;if(FLINE)FLINE.visible=false;if(BOB)BOB.visible=false;
+ vm.visible=true;vmGear='#';
+ $('#fsbar').style.display='none';$('#fsbite').style.display='none';$('#prompt').style.opacity=0;
+ if(!silent)toast('Tu ranges ta canne.')}
+function fishClick(){
+ if(FISH.st==='wait'){FISH.t=Math.min(FISH.t,FISH.wait*.4);toast('Trop tôt ! Le poisson se méfie…');sfx('tap');return}
+ if(FISH.st!=='bite')return;
+ $('#fsbite').style.display='none';
+ if(FISH.catch.junk){fishLand();return}
+ const f=FISH.catch.f,rod=fishData().rod;
+ Object.assign(FISH,{st:'reel',t:0,zp:.35,zv:0,zw:clamp(.3+.035*rod-f.d*.12,.15,.42),fp:.5,ft:.5,ftT:.4,prog:.3,rk:0});
+ $('#fsbar').style.display='block';$('#fstitle').textContent=f.r>=3?'Quelque chose d’énorme a mordu !':'Ça mord ! Ferre-le !';
+ tone(660,.08,'triangle',.06);shake=Math.max(shake,.03)}
+function fishLand(){
+ const fd=fishData(),c=FISH.catch;fd.total++;
+ BOB.visible=false;FLINE.visible=false;
+ if(c.junk){
+  if(c.junk==='botte'){fd.junk++;toast('Une vieille botte… Elle sent la vase.');sfx('bad')}
+  else if(c.junk==='epee'){const q=RI(1,2);give('lingot_fer',q);toast(`Une épée rouillée ! Tu la refonds : +${q} lingot${q>1?'s':''} de fer.`,'good');sfx('clang')}
+  else{fd.chest++;const g=Math.round(rnd(40,120)*(1+S.day*.04));S.gold+=g;let t=`Un coffre englouti ! +${fmt(g)} po`;
+   if(Math.random()<.6){const gm=pick(['rubis','saphir','emeraude']);give('gem_'+gm,1);t+=` et ${gemArt(gm)} ${GEMS[gm].n}`}toast(t+' !','gold');sfx('magic')}}
+ else{
+  const f=c.f,s=Math.round(f.s[0]+(f.s[1]-f.s[0])*Math.pow(Math.random(),1.7));
+  fd.bag.push({id:f.id,s});
+  const b=fd.book[f.id];let note='';
+  if(!b){fd.book[f.id]={n:1,best:s};const bonus=f.v*2;S.gold+=bonus;note=`Nouvelle espèce ! +${bonus} po`;sfx(f.r>=3?'magic':'coin')}
+  else{b.n++;if(s>b.best){b.best=s;note='Nouveau record !'}sfx(f.r>=3?'magic':'coin')}
+  if(f.r>=3)rumor(`On raconte que tu as sorti ${f.id==='barbu'?'le Vieux Barbu':'un'+(f.id==='koi'?'e carpe koï dorée':' esturgeon')} (${s} cm) de l’étang du Saule !`);
+  fishCard(f,s,note)}
+ burst(new THREE.Vector3(FISH.bx,.3,FISH.bz),14,'#bfe6ff',2.5);plop(1.2);ripple(FISH.bx,FISH.bz,1.6);
+ touch();fishCancel(true)}
+let fcT=0;
+function fishCard(f,s,note){
+ const e=$('#fscard');e.style.setProperty('--rc',RAR[f.r].c);
+ e.innerHTML=`${fishIcon(f,84)}<div class="nm">${f.n}</div><div>${s} cm · <span style="color:${RAR[f.r].c}">${RAR[f.r].n}</span> · ≈ ${fmt(fishPrice({id:f.id,s}))} po</div>${note?`<div class="gold"><b>${note}</b></div>`:''}`;
+ e.style.display='block';clearTimeout(fcT);fcT=setTimeout(()=>{e.style.display='none'},2800)}
+function fishLine(sag){
+ const U=ROD.userData;camera.updateMatrixWorld();U.tip.getWorldPosition(_ft);
+ const a=FLINE.geometry.attributes.position.array,b=BOB.position;
+ for(let i=0;i<14;i++){const k=i/13;a[i*3]=_ft.x+(b.x-_ft.x)*k;a[i*3+1]=_ft.y+(b.y+.12-_ft.y)*k-Math.sin(k*Math.PI)*sag;a[i*3+2]=_ft.z+(b.z-_ft.z)*k}
+ FLINE.geometry.attributes.position.needsUpdate=true;FLINE.visible=true}
+function fishUpdate(dt){
+ const F=FISH,U=ROD.userData,rod=fishData().rod,pr=$('#prompt');F.t+=dt;
+ $('#cross').className='';
+ if(F.st!=='reel'&&(keys.KeyW||keys.KeyA||keys.KeyS||keys.KeyD||joy.id!==null)){fishCancel(true);return}
+ let msg='';
+ if(F.st==='cast'){
+  const u=Math.min(1,F.t/.6);
+  U.piv.rotation.x=u<.35?-.95+(u/.35)*.65:u<.6?-.3-((u-.35)/.25)*1.0:-1.3+((u-.6)/.4)*.35;
+  if(u>=.35){camera.updateMatrixWorld();U.tip.getWorldPosition(_ft);const k=(u-.35)/.65;
+   BOB.visible=true;BOB.position.set(_ft.x+(F.bx-_ft.x)*k,_ft.y+(.08-_ft.y)*k+Math.sin(k*Math.PI)*1.4,_ft.z+(F.bz-_ft.z)*k);fishLine(.05)}
+  if(u>=1){F.st='wait';F.t=0;BOB.position.set(F.bx,.08,F.bz);ripple(F.bx,F.bz,1);plop(.8)}}
+ else if(F.st==='wait'){
+  msg='Attends que le bouchon plonge… · clic quand ça mord · E : ranger la canne';
+  U.piv.rotation.x=-.95+Math.sin(F.t*1.3)*.015;
+  let y=.08+Math.sin(F.t*3)*.012;F.nib-=dt;
+  if(F.nib<0&&F.nib>-.18)y-=.035;if(F.nib<=-.18){F.nib=rnd(1.2,2.8);ripple(BOB.position.x,BOB.position.z,.4);tone(900,.03,'sine',.02)}
+  BOB.position.set(F.bx,y,F.bz);fishLine(.3);
+  if(F.t>=F.wait){F.st='bite';F.t=0;F.catch=fishRoll();$('#fsbite').style.display='block';plop(1.3);ripple(F.bx,F.bz,1.4);shake=Math.max(shake,.02)}}
+ else if(F.st==='bite'){
+  BOB.position.set(F.bx+Math.sin(F.t*40)*.03,-.04,F.bz);U.piv.rotation.x=-.9+Math.sin(F.t*30)*.02;fishLine(.1);
+  if(F.t>.95+.1*rod){$('#fsbite').style.display='none';toast('Trop tard… le poisson a filé.');F.st='wait';F.t=0;F.wait=rnd(3,7)*(1-.12*rod)}}
+ else if(F.st==='reel'){
+  const f=F.catch.f;
+  F.zv+=(F.hold?3.1:-2.6)*dt;F.zp+=F.zv*dt;
+  if(F.zp<0){F.zp=0;if(F.zv<0)F.zv=-F.zv*.25}
+  if(F.zp>1-F.zw){F.zp=1-F.zw;if(F.zv>0)F.zv=-F.zv*.25}
+  F.ftT-=dt;if(F.ftT<=0){F.ft=rnd(.04,.96);F.ftT=rnd(.35,1.5)*(1.25-f.d*.8)}
+  const sp=(.22+f.d*.95)*(f.r>=4?1.15:1),df=F.ft-F.fp;F.fp+=clamp(df,-sp*dt,sp*dt)+Math.sin(F.t*(5+f.d*9))*.004*f.d;F.fp=clamp(F.fp,0,1);
+  const inside=F.fp>=F.zp&&F.fp<=F.zp+F.zw;
+  F.prog+=inside?dt*.33*(1+.08*rod):-dt*(.15+.2*f.d);
+  if(F.hold){F.rk-=dt;if(F.rk<=0){F.rk=.09;tone(1500,.02,'square',.012)}}
+  $('#fsz').style.left=(F.zp*100)+'%';$('#fsz').style.width=(F.zw*100)+'%';$('#fsf').style.left=(F.fp*100)+'%';
+  $('#fsprog i').style.width=(clamp(F.prog,0,1)*100)+'%';$('#fsz').classList.toggle('on',inside);
+  U.piv.rotation.x=-.8+(inside?Math.sin(F.t*25)*.012:Math.sin(F.t*35)*.03);U.piv.rotation.z=-.08+(F.fp-.5)*.35;
+  BOB.position.set(F.bx+(F.fp-.5)*1.2,.02+Math.sin(F.t*14)*.02,F.bz);fishLine(.02);
+  if(Math.random()<dt*4)ripple(BOB.position.x,BOB.position.z,.5);
+  if(F.prog>=1){$('#fsbar').style.display='none';fishLand();return}
+  if(F.prog<=0){$('#fsbar').style.display='none';toast(`La ligne se détend… ${f.r>=3?'quelque chose d’énorme':'le poisson'} s’est échappé.`,'bad');sfx('bad');fishCancel(true);return}}
+ pr.textContent=msg;pr.style.opacity=msg?1:0}
+
+/* ---------- le chien ---------- */
+let DOG=null;
+function buildDog(){
+ const g=new THREE.Group(),fur=mat('#b5733a',{roughness:.95}),light=mat('#ecd9b8',{roughness:.95}),dark=mat('#2a1a10',{roughness:.6});
+ const M=(geo,m,x,y,z,p)=>{const q=new THREE.Mesh(geo,m);q.position.set(x,y,z);q.castShadow=true;(p||g).add(q);return q};
+ const body=new THREE.Group();body.position.y=.5;g.add(body);
+ M(new THREE.SphereGeometry(.22,16,12),fur,0,0,0,body).scale.set(.85,.82,1.75);
+ M(new THREE.SphereGeometry(.16,14,10),light,0,-.05,.22,body).scale.set(.9,.9,1.1);
+ const head=new THREE.Group();head.position.set(0,.2,.38);body.add(head);
+ M(new THREE.SphereGeometry(.15,16,12),fur,0,0,0,head).scale.set(.95,.9,1);
+ M(new THREE.BoxGeometry(.12,.1,.17),light,0,-.045,.15,head);
+ M(new THREE.SphereGeometry(.033,10,8),dark,0,-.01,.24,head);
+ for(const s of [-1,1]){M(new THREE.SphereGeometry(.022,8,6),dark,s*.06,.04,.125,head);
+  const e=M(new THREE.ConeGeometry(.055,.14,8),mat('#7a4a22',{roughness:.95}),s*.09,.13,-.02,head);e.rotation.z=-s*.35;e.rotation.x=-.2}
+ const tong=M(new THREE.BoxGeometry(.05,.012,.08),mat('#d8606a',{roughness:.6}),0,-.1,.2,head);tong.visible=false;
+ const legs=[];for(const [x,z] of [[-.1,.24],[.1,.24],[-.1,-.24],[.1,-.24]]){const l=new THREE.Group();l.position.set(x,.42,z);g.add(l);M(new THREE.CylinderGeometry(.045,.038,.4,8),fur,0,-.2,0,l);M(new THREE.SphereGeometry(.046,8,6),light,0,-.4,.015,l);legs.push(l)}
+ const tail=new THREE.Group();tail.position.set(0,.08,-.36);body.add(tail);M(new THREE.CylinderGeometry(.03,.016,.32,8),fur,0,.16,0,tail);tail.rotation.x=-.7;
+ contactShadow(g,0,0,.32,.55,.45);
+ g.position.set(-3.5,0,-2.2);scene3.add(g);
+ ghost(.8,.9,1.1,0,.45,0,g);reg(g,'pet',{});
+ const tag=document.createElement('div');tag.className='tag3';tag.innerHTML='<b style="color:#ffd9a0"></b><span></span>';$('#tags').appendChild(tag);
+ DOG={g,body,head,legs,tail,tong,tag,tn:tag.firstChild,ts:tag.lastChild,tsig:'',ph:0,lp:0,sit:0,st:'',t:0,tx:-3.5,tz:-2.2,dig:null,bark:0,chase:0,happy:0,act:''}}
+function dogBark(dist){if(dist>30)return;SFXV=clamp(1-dist/30,.1,1);tone(560,.07,'square',.05);tone(420,.09,'sawtooth',.04,.08);noise(.08,.08,1500);SFXV=1}
+function dogHearts(){const p=new THREE.Vector3();DOG.head.getWorldPosition(p);p.y+=.25;burst(p,10,'#ff7aa8',1.6)}
+function petPrompt(){
+ const pd=petD();
+ if(!pd.adopted)return fishData().bag.length?'E : donner un poisson au chien errant':'Un chien errant, tout maigre… Il a l’air d’avoir faim (un poisson ?)';
+ return `E : caresser ${pd.name}`}
+function petInteract(){
+ const pd=petD(),dist=Math.hypot(DOG.g.position.x-P.x,DOG.g.position.z-P.z);
+ if(!pd.adopted){
+  const fd=fishData();
+  if(!fd.bag.length){toast('Le chien te regarde avec de grands yeux. Un poisson de l’étang du Saule, au sud du village, lui ferait plaisir…');dogBark(dist);return}
+  fd.bag.sort((a,b)=>fishPrice(a)-fishPrice(b));const c=fd.bag.shift(),f=FD(c.id);
+  DOG.happy=4;dogHearts();sfx('coin');
+  openModal(`<h2>Un nouvel ami !</h2><p style="text-align:center">Le chien engloutit ${f.id==='barbu'?'le Vieux Barbu (quel gâchis !)':'ton poisson ('+f.n.toLowerCase()+')'} et vient se coller à tes jambes. Visiblement, il a décidé de rester avec toi.</p>
+  <div class="card"><div class="small dim">Comment veux-tu l’appeler ?</div><input id="petn" maxlength="14" value="${pick(PETN)}" style="width:100%;margin-top:6px;padding:7px 9px;background:#120c07;border:1px solid #6b4a26;border-radius:6px;font-size:17px"></div>
+  <div class="row wrap" style="justify-content:center;margin-bottom:8px">${PETN.map(n=>`<button class="btn tiny" data-act="petPick" data-v="${n}">${n}</button>`).join('')}</div>
+  <div style="text-align:center"><button class="btn primary big" data-act="petOK">Adopter</button></div>
+  <div class="hint" style="margin-top:6px">Ton chien te suit partout, déterre des trésors de temps en temps et ne laisse aucune chance aux voleurs. Caresse-le avec E.</div>`,{locked:true});
+  touch();return}
+ pd.love++;DOG.happy=2.6;dogHearts();tone(880,.06,'sine',.04);tone(1175,.1,'sine',.04,.06);
+ if(pd.love%10===0)toast(`❤ ${pd.name} t’adore !`,'gold');
+ else if(Math.random()<.35)toast(pick([`${pd.name} remue la queue.`,`${pd.name} te lèche la main.`,`${pd.name} se roule dans l’herbe.`,`${pd.name} pose la tête sur ta botte.`]));
+ touch()}
+function dogFind(){
+ const pd=petD();pd.dug++;const r=Math.random();let t;
+ if(r<.28){const q=RI(3,6);give('bois',q);t=`${q} bois`}
+ else if(r<.45){const q=RI(2,4);give('charbon',q);t=`${q} charbon`}
+ else if(r<.6){if(S.day>12){const q=RI(1,2);give('lingot_fer',q);t=`${q} lingot${q>1?'s':''} de fer`}else{const q=RI(2,3);give('minerai_fer',q);t=`${q} minerai de fer`}}
+ else if(r<.84){const g=Math.round(rnd(10,35)*(1+S.day*.05));S.gold+=g;t=`une bourse de ${g} po`}
+ else if(r<.93){const g=pick(['rubis','saphir','emeraude']);give('gem_'+g,1);t=`${gemArt(g)} ${GEMS[g].n}`}
+ if(t)toast(`🐕 ${pd.name} a déterré ${t} !`,'gold');else toast(`🐕 ${pd.name} a déterré… un vieil os. Il a l’air ravi.`);
+ sfx('coin');touch()}
+function dogUpdate(dt){
+ if(!DOG||!S)return;
+ const pd=petD(),g=DOG.g,pos=g.position,dist=Math.hypot(pos.x-P.x,pos.z-P.z);
+ let moving=false,run=false,act='';
+ DOG.bark-=dt;DOG.happy=Math.max(0,DOG.happy-dt);DOG.chase=Math.max(0,DOG.chase-dt);
+ const T=FR.thief;
+ if(!pd.adopted){
+  act='a faim…';DOG.t-=dt;
+  if(DOG.t<=0){DOG.t=rnd(5,10);DOG.tx=-3.5+rnd(-2.5,2.5);DOG.tz=-2.2+rnd(-2,2)}
+  moving=stepToward(g,DOG.tx,DOG.tz,1.8,dt);
+  if(!moving&&dist<6){let df=Math.atan2(P.x-pos.x,P.z-pos.z)-g.rotation.y;while(df>Math.PI)df-=2*Math.PI;while(df<-Math.PI)df+=2*Math.PI;g.rotation.y+=df*Math.min(1,dt*3)}
+  if(S.day>=2&&!pd.hinted&&dist<14){pd.hinted=1;toast('🐕 Un chien errant rôde près de ta forge… Il a l’air affamé.')}}
+ else if(T&&!T.caught&&DOG.chase<=0&&Math.hypot(T.g.position.x-pos.x,T.g.position.z-pos.z)<50){
+  act='poursuit le voleur !';run=true;
+  moving=stepToward(g,T.g.position.x,T.g.position.z,7.4,dt);
+  if(DOG.bark<=0){dogBark(dist);DOG.bark=.8}
+  if(Math.hypot(T.g.position.x-pos.x,T.g.position.z-pos.z)<1.4){
+   T.stun=Math.max(T.stun,2.6);DOG.chase=4.5;
+   if(T.loot){S.res[T.loot.k]=(S.res[T.loot.k]||0)+T.loot.q;toast(`🐕 ${pd.name} arrache le sac du voleur : +${T.loot.q} ${RES[T.loot.k].n} !`,'good');T.loot=null;if(T.bag){T.g.remove(T.bag);T.bag=null}touch()}
+   else toast(`🐕 ${pd.name} mord le mollet du voleur ! Rattrape-le !`,'gold')}}
+ else if(DOG.dig){
+  act='creuse…';const D=DOG.dig;
+  if(D.st==='go'){moving=stepToward(g,D.x,D.z,4.4,dt);if(!moving){D.st='dig';D.t=2.6}}
+  else{D.t-=dt;if(Math.random()<dt*7){const p=new THREE.Vector3(pos.x+Math.sin(g.rotation.y)*.4,.15,pos.z+Math.cos(g.rotation.y)*.4);burst(p,3,'#6a4a2a',1.8)}
+   if(D.t<=0){DOG.dig=null;DOG.happy=2;dogFind()}}}
+ else{
+  // il suit le joueur, un peu derrière à droite (et attend dehors pendant l'arène)
+  let tx,tz;
+  if(ARENA.run||inArena(P.x,P.z,-3)){tx=52;tz=33;act='t’attend dehors'}
+  else{const sy=Math.sin(P.yaw),cy=Math.cos(P.yaw);tx=P.x+sy*1.5+cy*.9;tz=P.z+cy*1.5-sy*.9;act=FISH.st?'regarde le bouchon':'te suit'}
+  const d=Math.hypot(tx-pos.x,tz-pos.z);
+  if(d>40){navEnsure();const c=navNearest(tx,tz,8);if(c){const cc=navCenter(c[0],c[1]);pos.set(cc.x,0,cc.z)}}
+  else if(d>1.1){run=d>5;moving=stepToward(g,tx,tz,run?7:4.3,dt)}
+  if(!moving){let df=Math.atan2(P.x-pos.x,P.z-pos.z)-g.rotation.y;while(df>Math.PI)df-=2*Math.PI;while(df<-Math.PI)df+=2*Math.PI;g.rotation.y+=df*Math.min(1,dt*3)}
+  if(!ARENA.run&&!FG){pd.digT-=dt*(480/DAY_LEN);
+   if(pd.digT<=0){pd.digT=rnd(110,170)*Math.max(.6,1-pd.love*.01);const a=Math.random()*6.28;const x=pos.x+Math.cos(a)*1.8,z=pos.z+Math.sin(a)*1.8;
+    navEnsure();if(navFreeAt(x,z)){DOG.dig={st:'go',x,z};toast(`🐕 ${pd.name} renifle quelque chose…`)}}}}
+ DOG.act=act;
+ // animation
+ DOG.lp+=dt*(moving?(run?17:11):0);
+ const amp=moving?(run?.8:.55):0,sl=Math.sin(DOG.lp);
+ DOG.sit+=((!moving&&!DOG.dig?1:0)-DOG.sit)*Math.min(1,dt*4);
+ const L=DOG.legs,digging=DOG.dig&&DOG.dig.st==='dig';
+ L[0].rotation.x=digging?Math.sin(DOG.ph*22)*.9:sl*amp;L[3].rotation.x=sl*amp+DOG.sit*1.1;
+ L[1].rotation.x=digging?-Math.sin(DOG.ph*22)*.9:-sl*amp;L[2].rotation.x=-sl*amp+DOG.sit*1.1;
+ DOG.ph+=dt;
+ DOG.body.rotation.x=digging?.35:-.32*DOG.sit;DOG.body.position.y=.5-.08*DOG.sit+(moving?Math.abs(sl)*.03:0);
+ L[2].position.y=L[3].position.y=.42-.12*DOG.sit;
+ const wag=DOG.happy>0?24:moving?12:pd.adopted?6:2;DOG.tail.rotation.z=Math.sin(DOG.ph*wag)*(DOG.happy>0?.75:.35);
+ DOG.tail.rotation.x=pd.adopted||DOG.happy>0?-.7:.3;
+ DOG.tong.visible=run||DOG.happy>0;DOG.head.rotation.x=digging?.5:DOG.sit*.25+Math.sin(DOG.ph*1.3)*.04;
+ // étiquette
+ _wv.set(pos.x,1.15,pos.z).project(camera);
+ const vis=_wv.z<1&&Math.abs(_wv.x)<1.1&&Math.abs(_wv.y)<1.1&&dist<18;
+ DOG.tag.style.display=vis?'block':'none';
+ if(vis){DOG.tag.style.left=((_wv.x*.5+.5)*innerWidth)+'px';DOG.tag.style.top=((-_wv.y*.5+.5)*innerHeight)+'px';DOG.tag.style.opacity=clamp(1.3-dist/16,.35,1);
+  const nm=pd.adopted?pd.name:'Chien errant',sig=nm+'|'+act;if(DOG.tsig!==sig){DOG.tsig=sig;DOG.tn.textContent=nm;DOG.ts.textContent=act}}}
+
+/* ---------- carnet du forgeron ---------- */
+function carnetCheck(){
+ S.carnetR=S.carnetR||{};
+ TIERS.forEach((T,i)=>{if(S.carnetR[i])return;if(!Object.keys(TYPES).every(k=>S.flags['f_'+k+'_'+i]))return;
+  S.carnetR[i]=1;S.gold+=COLR[i];S.rep+=3*(i+1);toast(`📖 Carnet : toutes les pièces ${T.en} forgées ! +${fmt(COLR[i])} po`,'gold');sfx('magic');rumor(`Tu as forgé toutes les pièces ${T.en} : le village en parle.`);touch()})}
+function renderCarnet(){
+ const fd=fishData(),n=Object.keys(fd.book).length,ty=Object.keys(TYPES);S.carnetR=S.carnetR||{};
+ let h=`<div class="sec">Poissons de l’étang <small>${n}/${FISHES.length}</small></div><div class="grid g3">`+FISHES.map(f=>{const b=fd.book[f.id];
+  return `<div class="card" style="text-align:center;padding:6px 4px;margin:0;border-color:${b?RAR[f.r].c:'var(--line)'}">${fishIcon(f,46,!b)}<div class="small"><b style="color:${b?RAR[f.r].c:'var(--dim)'}">${b?f.n:'???'}</b></div><div class="small dim" style="line-height:1.15">${b?`record ${b.best} cm · ×${b.n}`:fishHint(f)}</div></div>`}).join('')+'</div>';
+ h+=`<div class="small dim" style="margin-top:6px">Prises : ${fd.total} · coffres repêchés : ${fd.chest} · vieilles bottes : ${fd.junk} · canne : ${RODS[fd.rod].n.toLowerCase()}</div>`;
+ h+=`<div class="sec">Pièces forgées de ta main <small>${ty.reduce((s,k)=>s+TIERS.filter((_,i)=>S.flags['f_'+k+'_'+i]).length,0)}/${ty.length*TIERS.length}</small></div>`;
+ h+=`<div class="card" style="overflow-x:auto"><table><tr><th></th>${TIERS.map((t,i)=>`<th style="text-align:center;color:${t.c}" title="${S.carnetR[i]?'Récompense obtenue':'Récompense : '+fmt(COLR[i])+' po'}">${t.n.slice(0,4)}${S.carnetR[i]?' ✔':''}</th>`).join('')}</tr>`+
+  ty.map(k=>`<tr><td class="small">${TYPES[k].n}</td>${TIERS.map((t,i)=>`<td style="text-align:center">${S.flags['f_'+k+'_'+i]?typeIcon(k,i,20):'<span class="dim">·</span>'}</td>`).join('')}</tr>`).join('')+`</table></div>`;
+ h+=`<div class="hint">Forge chacune des ${ty.length} pièces dans un matériau pour compléter sa colonne : le village récompense les forgerons complets (${COLR.map(fmt).join(' / ')} po).</div>`;
+ const pd=petD();if(pd.adopted)h+=`<div class="sec">${pd.name}</div><div class="card small">Caresses : ${pd.love} · trésors déterrés : ${pd.dug}</div>`;
+ return h}
+
+/* ---------- le ponton ---------- */
+function renderPond(){
+ const fd=fishData(),R0=RODS[fd.rod],nx=RODS[fd.rod+1],bag=fd.bag;
+ let h=`<h2>L’étang du Saule</h2><div class="hint" style="text-align:center">Face à l’eau, appuie sur E pour lancer. ${isNight()?'Le soir tombe : d’autres poissons sortent.':''}${isRain()?' La pluie fait mordre les truites…':''}</div>`;
+ h+=`<div class="sec">Ta canne</div><div class="card"><b>${R0.n}</b>${nx?`<div class="small dim" style="margin-top:4px">Suivante : <b style="color:var(--ink)">${nx.n}</b> — ${nx.d}</div><div style="margin-top:4px">${costChips(nx.cost)}</div><button class="btn primary" style="margin-top:6px" data-act="rodUp" ${have(nx.cost)?'':'disabled'}>Améliorer</button>`:'<div class="good small">La meilleure canne du royaume.</div>'}</div>`;
+ h+=`<div class="sec">Ton panier <small>${bag.length} poisson${bag.length>1?'s':''}</small></div>`;
+ if(bag.length){const tot=bag.reduce((s,c)=>s+fishPrice(c),0);
+  h+=`<div class="card row"><div class="grow small">Le poissonnier du village rachète ta pêche.</div><button class="btn good" data-act="fishSellAll">Tout vendre · ${fmt(tot)} po</button></div>`+
+   bag.map((c,i)=>{const f=FD(c.id);return `<div class="item r${f.r}">${fishIcon(f,40)}<div class="grow"><div class="nm rt">${f.n}</div><div class="small dim">${c.s} cm · ${RAR[f.r].n}</div></div><button class="btn tiny" data-act="fishSell" data-v="${i}">${fmt(fishPrice(c))} po</button></div>`}).join('')}
+ else h+=`<div class="hint">Ton panier est vide.</div>`;
+ h+=`<div class="hint">${petD().adopted?'':'Un chien affamé traîne près de ta forge… un poisson pourrait t’en faire un ami. '}Le carnet de pêche est dans le menu (☰ → Carnet).</div>`;
+ return h}
+RENDER.pond=renderPond;
+{const _rb=RENDER.bag;RENDER.bag=a=>{const n=fishData().bag.length;return _rb(a)+(n?`<div class="hint">🐟 Ton panier contient ${n} poisson${n>1?'s':''} : le poissonnier les rachète au ponton de l’étang.</div>`:'')}}
+Object.assign(A,{
+ rodUp:()=>{const fd=fishData(),nx=RODS[fd.rod+1];if(!nx||!have(nx.cost))return;pay(nx.cost);fd.rod++;toast(`${nx.n} !`,'good');sfx('magic');touch()},
+ fishSell:d=>{const fd=fishData(),c=fd.bag[+d.v];if(!c)return;const p=fishPrice(c);S.gold+=p;fd.bag.splice(+d.v,1);toast(`Le poissonnier t’en donne ${fmt(p)} po.`,'gold');sfx('coin');touch()},
+ fishSellAll:()=>{const fd=fishData();if(!fd.bag.length)return;const p=fd.bag.reduce((s,c)=>s+fishPrice(c),0);S.gold+=p;fd.bag=[];toast(`Toute ta pêche est vendue : +${fmt(p)} po`,'gold');sfx('coin');touch()},
+ petPick:d=>{const i=$('#petn');if(i)i.value=d.v},
+ petOK:()=>{const i=$('#petn'),pd=petD();let n=((i&&i.value)||'').replace(/[<>&"'`]/g,'').trim().slice(0,14);if(!n)n=pick(PETN);
+  pd.adopted=true;pd.name=n;pd.digT=60;closeModal();DOG.happy=3;dogBark(0);toast(`🐕 ${n} fait désormais partie de ta forge !`,'gold');sfx('magic');touch()}});
+ACH.push(
+ ['peche1','Ça mord !','Pêcher un premier poisson.',()=>Object.keys(fishData().book).length>=1,40],
+ ['peche6','Pêcheur du dimanche','Pêcher 6 espèces différentes.',()=>Object.keys(fishData().book).length>=6,200],
+ ['peche12','Carnet de pêche complet','Pêcher les 12 espèces de l’étang.',()=>Object.keys(fishData().book).length>=12,1500],
+ ['barbu','Le Vieux Barbu','Sortir le poisson légendaire de l’étang.',()=>!!fishData().book.barbu,800],
+ ['tresor','Trésor englouti','Repêcher un coffre au fond de l’étang.',()=>fishData().chest>=1,120],
+ ['chien','Meilleur ami','Adopter le chien errant.',()=>petD().adopted,80],
+ ['fouille','Fin limier','Ton chien déterre 10 trésors.',()=>petD().dug>=10,200],
+ ['carnet1','Carnet entamé','Forger les 12 pièces dans un même matériau.',()=>Object.keys(S.carnetR||{}).length>=1,150]);
+
+/* ---------- branchements ---------- */
+function initExt(){
+ buildRod();buildDog();
+ const hud=$('#hud');
+ hud.insertAdjacentHTML('beforeend',`<div id="fsbar"><div id="fstitle"></div><div id="fstrack"><div id="fsz"></div><div id="fsf">🐟</div></div><div id="fsprog"><i></i></div><div class="hintl">Maintiens le clic (ou Espace, ou ⚒) pour pousser la zone verte sous le poisson · relâche pour la laisser revenir</div></div><div id="fsbite">!</div><div id="fscard"></div>`);
+ addEventListener('mousedown',e=>{if(e.button===0&&FISH.st)FISH.hold=true});
+ addEventListener('mouseup',e=>{if(e.button===0)FISH.hold=false});
+ const bs=$('#bSwing');if(bs){bs.addEventListener('pointerdown',()=>{if(FISH.st)FISH.hold=true});const up=()=>{FISH.hold=false};bs.addEventListener('pointerup',up);bs.addEventListener('pointercancel',up);bs.addEventListener('pointerleave',up)}}
+function extUpdate(dt){
+ dogUpdate(dt);
+ for(let i=RIP.length-1;i>=0;i--){const o=RIP[i];o.t+=dt;const k=o.t/1.4;o.m.scale.setScalar(1+k*7*o.s);o.m.material.opacity=.7*(1-k);if(k>=1){scene3.remove(o.m);o.m.geometry.dispose();RIP.splice(i,1)}}
+ ripT-=dt;if(ripT<=0){ripT=rnd(1.5,4.5);if(Math.hypot(P.x-POND.x,P.z-POND.z)<35){const a=Math.random()*6.28,rr=Math.random()*(POND.r-.8);ripple(POND.x+Math.cos(a)*rr,POND.z+Math.sin(a)*rr,.6+Math.random()*.6)}}
+ carT-=dt;if(carT<=0){carT=2;carnetCheck()}}
+function extNewDay(){
+ fishCancel(true);
+ if(DOG){DOG.dig=null;if(petD().adopted)DOG.g.position.set(1.4,0,-6.2);else DOG.g.position.set(-3.5,0,-2.2)}}
+function extReset(){
+ fishCancel(true);for(const o of RIP)scene3.remove(o.m);RIP.length=0;
+ if(DOG&&S){DOG.dig=null;DOG.happy=0;DOG.g.position.set(petD().adopted?1.4:-3.5,0,petD().adopted?-6.2:-2.2)}}
+
 /* ===== Les Quatre Enclumes (3D) — démarrage ===== */
 function syncBuild(){}
-function resetWorldCaches(){if(typeof FR!=='undefined'&&FR){frEndMerch(true);frEndThief(true);frClearPk();FR.day=-1;FR.plan=null;for(const b of FR.bolts)scene3.remove(b.l);FR.bolts=[]}if(typeof wkReset==='function'&&DEP.g)wkReset();rackSigs='#';vitSig='#';appSig='#';sceneFx('off');if(typeof arenaCancel==='function')arenaCancel(true);if(FG)endForge();curTarget=null}
+function resetWorldCaches(){if(typeof extReset==='function')extReset();if(typeof FR!=='undefined'&&FR){frEndMerch(true);frEndThief(true);frClearPk();FR.day=-1;FR.plan=null;for(const b of FR.bolts)scene3.remove(b.l);FR.bolts=[]}if(typeof wkReset==='function'&&DEP.g)wkReset();rackSigs='#';vitSig='#';appSig='#';sceneFx('off');if(typeof arenaCancel==='function')arenaCancel(true);if(FG)endForge();curTarget=null}
 function newGame(){
  S=newState();custs=[];curH=null;resetWorldCaches();
  startDay();
@@ -5263,7 +5666,7 @@ function loop(now){
   if(dirty){dirty=false;if(panel&&modal)refreshPanel()}
   worldUpdate(dt,running);
   updateHud();
-  const lh=$('#lockhint');if(!isTouch){lh.style.display=(!modal&&!FG&&document.pointerLockElement!==$('#gl')&&!lockState.drag)?'block':'none'}
+  const lh=$('#lockhint');if(!isTouch){lh.style.display=(!modal&&!FG&&!FISH.st&&document.pointerLockElement!==$('#gl')&&!lockState.drag)?'block':'none'}
   renderFrame();
  }catch(e){console.error(e);window.__err=(window.__err||0)+1;if(window.__err<5)toast('Erreur : '+e.message,'bad')}
  autosave+=dt;if(autosave>20){autosave=0;save()}}
