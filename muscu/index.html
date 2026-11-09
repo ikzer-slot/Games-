@@ -382,7 +382,7 @@ function repRange(e) {
   const g = S.profile.goal;
   if (g === 'force') return e.c ? [3, 6] : [6, 10];
   if (g === 'endurance') return e.c ? [10, 15] : [12, 20];
-  return e.c ? [6, 10] : [10, 15];
+  return [10, 12];
 }
 const doneSets = x => (x.sets || []).filter(s => s.done && num(s.r) > 0).map(s => ({ w: num(s.w), r: num(s.r), rpe: num(s.rpe) }));
 function history(exId) {
@@ -396,10 +396,11 @@ function history(exId) {
 }
 function suggest(exId) {
   const e = exInfo(exId), [lo, hi] = repRange(e), h = history(exId), inc = step(e), mid = Math.round((lo + hi) / 2);
-  if (!h.length) return { w: null, r: mid, n: 3, kind: 'new', tag: 'Nouveau',
-    why: `Première fois : prends une charge que tu pourrais soulever ${hi} fois et arrête-toi à ${mid} reps (RPE 7). L’app ajustera ensuite.` };
+  const n0 = e.c ? 4 : 3;
+  if (!h.length) return { w: null, r: lo, n: n0, kind: 'new', tag: 'Nouveau',
+    why: `Première fois : prends une charge que tu pourrais soulever ${hi} fois et arrête-toi à ${lo} reps (RPE 7-8). L’app ajustera ensuite.` };
   const last = h[h.length - 1], top = last.top, topSets = last.sets.filter(s => s.w === top);
-  const n = Math.max(3, Math.min(5, last.sets.length));
+  const n = Math.max(3, Math.min(4, last.sets.length));
   const minR = Math.min(...topSets.map(s => s.r)), maxRpe = Math.max(0, ...topSets.map(s => s.rpe));
   const reps = topSets.map(s => s.r).join('/');
   const prev = h.length > 1 ? h[h.length - 2] : null;
@@ -409,7 +410,7 @@ function suggest(exId) {
     const prevTop = prev && prev.top === top ? Math.min(...prev.sets.filter(s => s.w === top).map(s => s.r)) : null;
     if (prevTop !== null && prevTop < lo) {
       const w = roundTo(top * 0.9, e.kind === 'dumbbell' ? 2 : 2.5);
-      return { w, r: lo + 1, n, kind: 'down', tag: 'Décharge', why: `Deux séances de suite sous ${lo} reps à ${fmt(top)} kg. On baisse de 10 % pour reconstruire proprement.` };
+      return { w, r: lo, n, kind: 'down', tag: 'Décharge', why: `Deux séances de suite sous ${lo} reps à ${fmt(top)} kg. On baisse de 10 % pour reconstruire proprement.` };
     }
     return { w: top, r: lo, n, kind: 'hold', tag: 'On consolide', why: `Séries incomplètes la dernière fois (${fmt(top)} kg × ${reps}). Même charge, vise ${lo} reps sur chaque série.` };
   }
@@ -716,8 +717,8 @@ function vProfile() {
   return `
   <section class="card"><span class="eyebrow">Profil</span>
     <label class="field">Prénom<input id="pf-name" data-f="pname" value="${esc(S.profile.name)}" placeholder="Pour que le coach te tutoie"></label>
-    <label class="field">Objectif<select id="pf-goal" data-f="goal">${Object.entries(GOALS).map(([k, v]) => `<option value="${k}" ${S.profile.goal === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-    <p class="small muted">Fourchettes de reps utilisées : ${S.profile.goal === 'force' ? 'polyarticulaires 3–6, isolation 6–10' : S.profile.goal === 'endurance' ? 'polyarticulaires 10–15, isolation 12–20' : 'polyarticulaires 6–10, isolation 10–15'}.</p>
+    <label class="field">Objectif<select id="pf-goal" data-f="goal">${Object.entries(GOALS).map(([k, v]) => `<option value="${k}" ${S.profile.goal === k ? 'selected' : ''}>${v}${k === 'hypertrophie' ? ' (3-4 × 10)' : ''}</option>`).join('')}</select></label>
+    <p class="small muted">Fourchettes de reps utilisées : ${S.profile.goal === 'force' ? 'polyarticulaires 3–6, isolation 6–10' : S.profile.goal === 'endurance' ? 'polyarticulaires 10–15, isolation 12–20' : '10–12 reps, 4 séries en polyarticulaire, 3 en isolation'}.</p>
     <label class="field">Barre olympique<select id="pf-bar" data-f="bar">${[20, 15, 10].map(v => `<option value="${v}" ${num(S.profile.bar) === v ? 'selected' : ''}>${v} kg</option>`).join('')}</select></label>
   </section>
   <section class="card"><div class="row between"><span class="eyebrow">Poids de corps</span>${lastBw ? `<span class="num">${fmt(lastBw.kg)} kg</span>` : ''}</div>
