@@ -117,7 +117,7 @@ main.resting { padding-bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
 .plate { width: 9px; border-radius: 2px; border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); box-sizing: border-box; }
 .plates-txt { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-left: 10px; }
 .sets { display: grid; gap: 6px; }
-.set { display: grid; grid-template-columns: 26px minmax(0,1fr) minmax(0,1fr) minmax(0,.9fr) 48px; gap: 6px; align-items: center; }
+.set { display: grid; grid-template-columns: 26px minmax(0,1fr) minmax(0,1fr) 52px; gap: 6px; align-items: center; }
 .set.head { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .set .n { font-family: var(--mono); color: var(--muted); text-align: center; }
 .set input, .set select { min-width: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; height: 44px; padding: 0 8px; text-align: center; font-family: var(--mono); font-size: 16px; }
@@ -386,13 +386,9 @@ function step(e) {
   return 2.5;
 }
 const roundTo = (w, s) => Math.max(0, Math.round(w / s) * s);
-function repRange(e) {
-  const g = S.profile.goal;
-  if (g === 'force') return e.c ? [3, 6] : [6, 10];
-  if (g === 'endurance') return e.c ? [10, 15] : [12, 20];
-  return [10, 12];
-}
-const doneSets = x => (x.sets || []).filter(s => s.done && num(s.r) > 0).map(s => ({ w: num(s.w), r: num(s.r), rpe: num(s.rpe) }));
+function repTarget() { const g = S.profile.goal; return g === 'force' ? 6 : g === 'endurance' ? 15 : 10; }
+function repRange() { const t = repTarget(); return [t, t]; }
+const doneSets = x => (x.sets || []).filter(s => s.done && num(s.r) > 0).map(s => ({ w: num(s.w), r: num(s.r) }));
 function history(exId) {
   const out = [];
   for (const s of S.sessions) {
@@ -403,39 +399,37 @@ function history(exId) {
   return out;
 }
 function suggest(exId) {
-  const e = exInfo(exId), [lo, hi] = repRange(e), h = history(exId), inc = step(e), mid = Math.round((lo + hi) / 2);
-  const n0 = e.c ? 4 : 3;
-  if (!h.length) return { w: null, r: lo, n: n0, kind: 'new', tag: 'Nouveau',
-    why: `Première fois : prends une charge que tu pourrais soulever ${hi} fois et arrête-toi à ${lo} reps (RPE 7-8). L’app ajustera ensuite.` };
+  // Method: every set close to failure, fixed target T. 10/9/8 is fine; when every set hits T, add load.
+  const e = exInfo(exId), T = repTarget(), h = history(exId), inc = step(e);
+  if (!h.length) return { w: null, r: T, n: e.c ? 4 : 3, kind: 'new', tag: 'Nouveau',
+    why: `Première fois : trouve une charge où tu arrives tout juste à ${T} reps sur la 1re série. L’app ajustera ensuite.` };
   const last = h[h.length - 1], top = last.top, topSets = last.sets.filter(s => s.w === top);
   const n = Math.max(3, Math.min(4, last.sets.length));
-  const minR = Math.min(...topSets.map(s => s.r)), maxRpe = Math.max(0, ...topSets.map(s => s.rpe));
-  const reps = topSets.map(s => s.r).join('/');
-  const prev = h.length > 1 ? h[h.length - 2] : null;
-  if (minR >= hi && (!maxRpe || maxRpe <= 9))
-    return { w: top + inc, r: lo, n, kind: 'up', tag: 'On monte', why: `Dernière fois ${fmt(top)} kg × ${reps} : haut de ta fourchette ${lo}–${hi} atteint. +${fmt(inc)} kg et on repart à ${lo} reps.` };
-  if (minR < lo) {
-    const prevTop = prev && prev.top === top ? Math.min(...prev.sets.filter(s => s.w === top).map(s => s.r)) : null;
-    if (prevTop !== null && prevTop < lo) {
-      const w = roundTo(top * 0.9, e.kind === 'dumbbell' ? 2 : 2.5);
-      return { w, r: lo, n, kind: 'down', tag: 'Décharge', why: `Deux séances de suite sous ${lo} reps à ${fmt(top)} kg. On baisse de 10 % pour reconstruire proprement.` };
-    }
-    return { w: top, r: lo, n, kind: 'hold', tag: 'On consolide', why: `Séries incomplètes la dernière fois (${fmt(top)} kg × ${reps}). Même charge, vise ${lo} reps sur chaque série.` };
+  const minR = Math.min(...topSets.map(s => s.r)), reps = topSets.map(s => s.r).join('/');
+  if (minR >= T)
+    return { w: top + inc, r: T, n, kind: 'up', tag: 'On monte', why: `Dernière fois ${fmt(top)} kg × ${reps} : ${T} reps sur toutes les séries. +${fmt(inc)} kg, vise ${T} sur la 1re série.` };
+  const same = h.slice(-3).filter(x => x.top === top);
+  const tot = x => x.sets.filter(s => s.w === top).reduce((a, s) => a + s.r, 0);
+  if (same.length === 3 && tot(same[2]) <= tot(same[0])) {
+    const w = roundTo(top * 0.9, e.kind === 'dumbbell' ? 2 : 2.5);
+    return { w, r: T, n, kind: 'down', tag: 'Décharge', why: `3 séances à ${fmt(top)} kg sans gagner de reps (${reps}). On baisse de 10 % une séance pour relancer la progression.` };
   }
-  if (maxRpe >= 10)
-    return { w: top, r: minR, n, kind: 'hold', tag: 'On consolide', why: `Tu étais à l’échec (RPE 10) à ${fmt(top)} kg. Même charge et mêmes reps, en gardant une rep en réserve.` };
-  return { w: top, r: Math.min(hi, minR + 1), n, kind: 'hold', tag: 'On ajoute une rep', why: `Dernière fois ${fmt(top)} kg × ${reps}. Même charge, +1 rep par série jusqu’à ${hi}, puis on montera.` };
+  return { w: top, r: T, n, kind: 'hold', tag: 'Même charge', why: `Dernière fois ${fmt(top)} kg × ${reps}. Vise ${T} sur chaque série : dès que tu fais ${topSets.length} × ${T}, l’app monte la charge.` };
 }
 function adjustNext(x, i) {
   const e = exInfo(x.ex), s = x.sets[i], nx = x.sets[i + 1];
-  const w = num(s.w), r = num(s.r), rpe = num(s.rpe), t = num(x.target?.r) || repRange(e)[0];
+  const w = num(s.w), r = num(s.r), T = num(x.target?.r) || repTarget();
   let nw = w, msg;
-  if (r >= t + 3 || (rpe && rpe <= 6)) { nw = w + step(e); msg = `Série ${i + 1} trop facile (${r} reps${rpe ? ' @ RPE ' + rpe : ''}) → ${fmt(nw)} kg sur la suivante.`; }
-  else if (r < t - 2 || rpe >= 10) { nw = roundTo(w * 0.93, e.kind === 'dumbbell' ? 2 : 2.5); msg = `Série ${i + 1} très dure (${r} reps${rpe ? ' @ RPE ' + rpe : ''}) → baisse à ${fmt(nw)} kg pour garder la technique.`; }
-  else msg = `Série ${i + 1} dans la cible. Garde ${fmt(w)} kg.`;
-  if (!nx) msg = `Exercice terminé : ${doneSets(x).length} séries. ` + (r >= t + 2 ? 'Tu peux monter la prochaine fois.' : '');
+  if (r >= T + 2) { nw = w + step(e); msg = `${r} reps : tu en avais en réserve. ${fmt(nw)} kg pour les séries suivantes, vise ${T} pile.`; }
+  else if (r <= T - 4) { nw = roundTo(w * 0.93, e.kind === 'dumbbell' ? 2 : 2.5); msg = `Seulement ${r} reps : baisse à ${fmt(nw)} kg pour les séries suivantes.`; }
+  else if (r >= T) msg = `${r} reps : parfait. Garde ${fmt(w)} kg.`;
+  else msg = `${r} reps : normal de perdre des reps à l’échec. Garde ${fmt(w)} kg.`;
+  if (!nx) {
+    const ds = doneSets(x), topW = Math.max(...ds.map(d => d.w)), atTop = ds.filter(d => d.w === topW);
+    msg = atTop.length && atTop.every(d => d.r >= T) ? `${atTop.length} × ${T} validés à ${fmt(topW)} kg : la prochaine fois, l’app monte la charge.` : `Exercice terminé. La prochaine fois : même charge, vise ${T} sur chaque série.`;
+  }
   x.hint = msg;
-  if (nx && !nx.done && !nx.edited) nx.w = nw;
+  x.sets.slice(i + 1).forEach(n => { if (!n.done && !n.edited) n.w = nw; });
 }
 function weeklySets(days = 7, includeActive = true) {
   const out = {}; const lim = Date.now() - days * 86400000;
@@ -544,7 +538,7 @@ function plateHTML(w) {
 function makeEx(id, plan) {
   const sg = suggest(id);
   const t = plan ? { w: plan.weight ?? sg.w, r: plan.reps || sg.r, n: plan.sets || sg.n } : { w: sg.w, r: sg.r, n: sg.n };
-  const sets = Array.from({ length: Math.max(1, Math.min(8, t.n)) }, () => ({ w: t.w ?? '', r: t.r, rpe: '', done: false }));
+  const sets = Array.from({ length: Math.max(1, Math.min(8, t.n)) }, () => ({ w: t.w ?? '', r: t.r, done: false }));
   return { ex: id, target: t, kind: sg.kind, tag: plan ? 'Plan du coach' : sg.tag, why: plan?.note ? `${plan.note} · ${sg.why}` : sg.why, sets };
 }
 function startWorkout(name, ids, group, plans) {
@@ -655,12 +649,11 @@ function vExercise(x, i) {
     <div class="advice ${kindClass(x.kind)}"><span class="tag">${esc(x.tag || 'Conseil')}</span><b>${esc(advice)}</b><span>${esc(x.why || '')}</span></div>
     ${e.kind === 'barbell' ? plateHTML(num((firstOpen || x.sets[x.sets.length - 1] || {}).w)) : ''}
     <div class="sets">
-      <div class="set head"><span>#</span><span>${bw ? '+ kg' : 'kg'}</span><span>reps</span><span>RPE</span><span></span></div>
+      <div class="set head"><span>#</span><span>${bw ? '+ kg' : 'kg'}</span><span>reps</span><span></span></div>
       ${x.sets.map((s, j) => `<div class="set ${s.done ? 'done' : ''}">
         <span class="n">${j + 1}</span>
         <input id="w-${i}-${j}" inputmode="decimal" data-f="w" data-x="${i}" data-s="${j}" value="${esc(s.w)}" placeholder="kg" aria-label="Charge série ${j + 1}">
         <input id="r-${i}-${j}" inputmode="numeric" data-f="r" data-x="${i}" data-s="${j}" value="${esc(s.r)}" aria-label="Répétitions série ${j + 1}">
-        <select id="p-${i}-${j}" data-f="rpe" data-x="${i}" data-s="${j}" aria-label="RPE série ${j + 1}">${['', 6, 7, 7.5, 8, 8.5, 9, 9.5, 10].map(v => `<option value="${v}" ${String(s.rpe) === String(v) ? 'selected' : ''}>${v === '' ? '–' : v}</option>`).join('')}</select>
         <button class="ok" data-act="done" data-x="${i}" data-s="${j}" aria-pressed="${!!s.done}" aria-label="Valider la série ${j + 1}">✓</button>
       </div>`).join('')}
     </div>
@@ -769,7 +762,7 @@ function vProfile() {
   <section class="card"><span class="eyebrow">Profil</span>
     <label class="field">Prénom<input id="pf-name" data-f="pname" value="${esc(S.profile.name)}" placeholder="Pour que le coach te tutoie"></label>
     <label class="field">Objectif<select id="pf-goal" data-f="goal">${Object.entries(GOALS).map(([k, v]) => `<option value="${k}" ${S.profile.goal === k ? 'selected' : ''}>${v}${k === 'hypertrophie' ? ' (3-4 × 10)' : ''}</option>`).join('')}</select></label>
-    <p class="small muted">Fourchettes de reps utilisées : ${S.profile.goal === 'force' ? 'polyarticulaires 3–6, isolation 6–10' : S.profile.goal === 'endurance' ? 'polyarticulaires 10–15, isolation 12–20' : '10–12 reps, 4 séries en polyarticulaire, 3 en isolation'}.</p>
+    <p class="small muted">Méthode : chaque série proche de l’échec, objectif ${repTarget()} reps (3 à 4 séries). ${repTarget()}/${repTarget()-1}/${repTarget()-2}, c’est bon. Dès que tu fais ${repTarget()} reps sur toutes les séries, la charge monte.</p>
     <label class="field">Barre olympique<select id="pf-bar" data-f="bar">${[20, 15, 10].map(v => `<option value="${v}" ${num(S.profile.bar) === v ? 'selected' : ''}>${v} kg</option>`).join('')}</select></label>
   </section>
   <section class="card"><div class="row between"><span class="eyebrow">Poids de corps</span>${lastBw ? `<span class="num">${fmt(lastBw.kg)} kg</span>` : ''}</div>
@@ -831,16 +824,16 @@ function ask(msg, ok, fn) {
 /* ---------- Coach IA ---------- */
 function coachContext() {
   const p = S.profile, week = weeklySets(7);
-  const sess = [...S.sessions].reverse().slice(0, 10).map(s => `- ${s.date.slice(0, 10)} « ${s.name} » (${s.durationMin || '?'} min) : ` + s.exercises.map(x => `${exInfo(x.ex).name} ${doneSets(x).map(t => `${fmt(t.w)}×${t.r}${t.rpe ? '@' + t.rpe : ''}`).join(', ')}`).join(' | ')).join('\n') || '(aucune séance enregistrée)';
+  const sess = [...S.sessions].reverse().slice(0, 10).map(s => `- ${s.date.slice(0, 10)} « ${s.name} » (${s.durationMin || '?'} min) : ` + s.exercises.map(x => `${exInfo(x.ex).name} ${doneSets(x).map(t => `${fmt(t.w)}×${t.r}`).join(', ')}`).join(' | ')).join('\n') || '(aucune séance enregistrée)';
   const ids = [...new Set(S.sessions.flatMap(s => s.exercises.map(x => x.ex)))];
   const recs = ids.map(id => { const h = history(id); return `- ${exInfo(id).name} : 1RM est. ${Math.round(Math.max(...h.map(x => x.e1rm)))} kg, ${h.length} séances, conseil app → ${(() => { const s = suggest(id); return s.w != null ? `${s.n}×${s.r} à ${fmt(s.w)} kg (${s.tag})` : 'à calibrer'; })()}`; }).join('\n') || '(aucun)';
   const act = S.active ? `Séance en cours « ${S.active.name} » : ` + S.active.exercises.map(x => `${exInfo(x.ex).name} [${x.sets.map(s => `${s.w || '?'}×${s.r || '?'}${s.done ? '✓' : ''}`).join(', ')}]`).join(' | ') : 'Aucune séance en cours.';
   const bw = (p.bodyweight || []).slice(-4).map(b => `${b.d.slice(0, 10)}: ${b.kg} kg`).join(', ') || 'non renseigné';
-  return `Tu es le coach de musculation intégré à l’appli « Carnet de Fonte ». Tu parles français, tu tutoies, ton ton est direct, motivant et précis. Tu t’appuies sur les données ci-dessous (charges en kg, reps, RPE) et tu donnes des chiffres concrets : charges, séries, reps, repos. Principes : surcharge progressive, 10 à 20 séries par muscle et par semaine, technique avant la charge, décharge en cas de stagnation. Réponses courtes (moins de 180 mots) sauf si on te demande un programme. Utilise des listes à puces et du **gras** pour les chiffres clés. Si l’athlète parle de douleur ou de blessure, conseille d’arrêter l’exercice concerné et de consulter un professionnel de santé.
+  return `Tu es le coach de musculation intégré à l’appli « Carnet de Fonte ». Tu parles français, tu tutoies, ton ton est direct, motivant et précis. Tu t’appuies sur les données ci-dessous (charges en kg, reps) et tu donnes des chiffres concrets : charges, séries, reps, repos. Principes : surcharge progressive, 10 à 20 séries par muscle et par semaine, technique avant la charge, décharge en cas de stagnation. Réponses courtes (moins de 180 mots) sauf si on te demande un programme. Utilise des listes à puces et du **gras** pour les chiffres clés. Si l’athlète parle de douleur ou de blessure, conseille d’arrêter l’exercice concerné et de consulter un professionnel de santé.
 
-PROFIL : ${p.name || 'athlète'} · objectif ${GOALS[p.goal] || p.goal} · fourchettes de reps app : ${repRange({ c: 1 }).join('–')} (polyarticulaires), ${repRange({ c: 0 }).join('–')} (isolation) · poids de corps : ${bw} · date du jour : ${new Date().toISOString().slice(0, 10)}
+PROFIL : ${p.name || 'athlète'} · objectif ${GOALS[p.goal] || p.goal} · MÉTHODE DE L’ATHLÈTE (à respecter) : chaque série proche de l’échec, objectif ${repTarget()} reps, 3 à 4 séries ; une baisse du type ${repTarget()}/${repTarget()-1}/${repTarget()-2} est normale ; il augmente la charge dès qu’il fait ${repTarget()} reps sur toutes ses séries. Il n’utilise pas le RPE, n’en parle pas · poids de corps : ${bw} · date du jour : ${new Date().toISOString().slice(0, 10)}
 SÉRIES PAR MUSCLE (7 derniers jours) : ${MUSCLES.map(m => `${m} ${week[m] || 0}`).join(', ')}
-DERNIÈRES SÉANCES (plus récente d’abord ; format charge×reps@RPE) :
+DERNIÈRES SÉANCES (plus récente d’abord ; format charge×reps) :
 ${sess}
 PAR EXERCICE :
 ${recs}
@@ -919,7 +912,7 @@ document.addEventListener('click', e => {
       if (s.done) { const nx = $(`#r-${xi}-${si + 1}`); if (nx) nx.closest('.set').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
       break;
     }
-    case 'addset': { const x = a.exercises[xi], l = x.sets[x.sets.length - 1] || {}; x.sets.push({ w: l.w ?? '', r: x.target?.r || l.r || '', rpe: '', done: false }); Store.saveActive(); render(); break; }
+    case 'addset': { const x = a.exercises[xi], l = x.sets[x.sets.length - 1] || {}; x.sets.push({ w: l.w ?? '', r: x.target?.r || l.r || '', done: false }); Store.saveActive(); render(); break; }
     case 'rmset': { const x = a.exercises[xi]; if (x.sets.length > 1) x.sets.pop(); Store.saveActive(); render(); break; }
     case 'rmex': a.exercises.splice(xi, 1); Store.saveActive(); render(); break;
     case 'addex': a.exercises.push(makeEx(b.dataset.id)); S.ui.picker = false; S.ui.q = ''; Store.saveActive(); render(); $(`#ex-${a.exercises.length - 1}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }); break;
@@ -950,8 +943,7 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const t = e.target, f = t.dataset?.f; if (!f) return;
   const a = S.active;
-  if (f === 'rpe' && a) { a.exercises[+t.dataset.x].sets[+t.dataset.s].rpe = t.value; Store.saveActive(); }
-  else if (f === 'progEx') { S.ui.progEx = t.value; render(); }
+  if (f === 'progEx') { S.ui.progEx = t.value; render(); }
   else if (f === 'goal') { S.profile.goal = t.value; Store.saveProfile(); render(); }
   else if (f === 'bar') { S.profile.bar = num(t.value); Store.saveProfile(); render(); }
 });
