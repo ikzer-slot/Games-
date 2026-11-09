@@ -11,7 +11,7 @@ La progression est sauvegardée dans le navigateur (localStorage).
 
 ## Contrôles
 - **ZQSD / WASD** : marcher · **Maj** : courir · **souris** : regarder
-- **Clic / F** : frapper · **clic droit / Q** : parer · **E** : agir
+- **Clic / F** : frapper · **clic droit / R** : parer · **E** : agir
 - **I** : sac · **Échap** : menu
 - Mobile : joystick à gauche, glisser à droite pour regarder, boutons ⚒ / ✋ / 🛡
 

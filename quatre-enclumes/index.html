@@ -176,6 +176,7 @@ body.touch #fgbar{bottom:130px}
 @media (max-width:640px){#riv{min-width:150px;font-size:11px}.rvr span{max-width:70px}}
 body.touch #goal{left:auto;right:8px;transform:none;top:46px;max-width:44vw;text-align:right;font-size:12px}
 body.touch #riv{min-width:150px}
+@media (max-width:640px){#hr [data-act=snd]{display:none}}
 
 .wtag b{font-size:12px}.wtag span{font-size:11px;color:#f2e8cc}
 @media (max-width:1180px){#goal{left:auto;right:8px;transform:none;top:46px;max-width:40vw;text-align:right;font-size:13px}}
@@ -240,7 +241,7 @@ body.touch #bBlock{display:flex}
  <div id="arhud"><div id="arwave"></div><div id="arinfo"></div><div id="arboss"><b></b><div><i></i></div></div><div id="arhp"><i></i><span></span></div><div id="arst"><i></i></div></div>
  <div id="cross"></div>
  <div id="prompt"></div>
- <div id="lockhint"><b>Clique dans la scène</b> pour regarder autour de toi<br><span class="dim small">ZQSD / WASD : marcher · Maj : courir · clic ou F : frapper · clic droit / Q : parer · E : agir · I : sac · Échap : menu</span></div>
+ <div id="lockhint"><b>Clique dans la scène</b> pour regarder autour de toi<br><span class="dim small">ZQSD / WASD : marcher · Maj : courir · clic ou F : frapper · clic droit / R : parer · E : agir · I : sac · Échap : menu</span></div>
  <div id="fgbar"><div id="fgtitle"></div><div id="fgtrack"><div id="fgz"></div><div id="fgc"></div></div><div id="fgdots"></div><div id="fgmsg"></div><div class="hintl">Frappe (clic / Espace) quand le curseur est dans la zone dorée · Échap pour arrêter</div></div>
 </div>
 <div id="mroot"></div><div id="toasts"></div>
@@ -1352,11 +1353,14 @@ const JOBS={
  chevalier:{n:'Chevalier',cls:2,w:{epee:3,bouclier:2,casque:2,lance:2,plastron:3,jambieres:2}}};
 const VILL=[['Hugues','laboureur','m'],['Colette','laboureur','f'],['Mathurin','bucheron','m'],['Perrine','bucheron','f'],['Osbert','mineur','m'],['Bastien','mineur','m'],['Dagobert','garde','m'],['Alix','garde','f'],['Joffrey','chasseur','m'],['Lucette','chasseur','f'],['Gisèle','marchand','f'],['Thibaut','marchand','m'],['Sire Foulques','chevalier','m'],['Dame Isaure','chevalier','f'],['Éloïse','laboureur','f'],['Hubert','mineur','m']];
 const gx=(vi,m,f)=>VILL[vi][2]==='f'?f:m;
+const PLUR={fer:'fers à cheval',jambieres:'jambières'};
+const plur=t=>PLUR[t]||TYPES[t].n.toLowerCase()+'s';
+const agr=(t,m)=>{const a=TYPES[t].a;return a==='des'?m+'es':a==='une'?m+'e':m};
 const VCOL=['#8a5a3a','#a8503a','#6a7a3a','#3a7a6a','#5a5a9a','#8a4a8a','#9a7a2a','#4a6a8a','#a04a5a','#5a8a4a','#7a5a9a','#9a6a3a','#2f4f8a','#8a2f5f','#6a8a2f','#4f6a6a'];
 
 const AIS=[
  {id:'gerard',n:'Gérard Barbe-Noire',short:'Gérard',tag:'Le vétéran — vise la qualité',c:'#8a2f2f',skill:.75,price:1.18,aggr:.35},
- {id:'marthe',n:'Marthe la Rouge',short:'Marthe',tag:'La fournaise — vend en gros, pas cher',c:'#b8581e',skill:.5,price:.86,aggr:.65},
+ {id:'marthe',f:1,n:'Marthe la Rouge',short:'Marthe',tag:'La fournaise — vend en gros, pas cher',c:'#b8581e',skill:.5,price:.86,aggr:.65},
  {id:'odon',n:'Odon le Rusé',short:'Odon',tag:'Le copieur — observe et imite',c:'#2f6a8a',skill:.58,price:1.0,aggr:.9}];
 const TIER_UP=[70,240,800,2800,9000], TIER_DAY=[4,10,18,28,40];
 
@@ -1441,7 +1445,7 @@ function wipeSave(){try{localStorage.removeItem(SAVE_KEY)}catch(e){}}
 function fv(type,tier,rar,q,gem,ench){let v=TYPES[type].base*TIERS[tier].mult*RAR[rar].m*(0.8+0.5*q);if(gem)v+=GEMS[gem].v*(1+0.4*rar);if(ench)v*=1.3;return Math.max(1,Math.round(v))}
 const fair=it=>fv(it.type,it.tier,it.rar,it.q,it.gem,it.ench);
 function itemTitle(it){const T=TYPES[it.type];return it.uname?it.uname:`${T.n} ${TIERS[it.tier].en}`}
-function itemSub(it){const T=TYPES[it.type];let s=it.uname?`${T.n} ${TIERS[it.tier].en}`:'';if(it.ench)s+=(s?' · ':'')+`enchantée (${it.ench})`;if(it.gem)s+=(s?' · ':'')+`sertie d’un ${GEMS[it.gem].n}`;return s}
+function itemSub(it){const T=TYPES[it.type];let s=it.uname?`${T.n} ${TIERS[it.tier].en}`:'';if(it.ench)s+=(s?' · ':'')+`${agr(it.type,'enchanté')} (${it.ench})`;if(it.gem)s+=(s?' · ':'')+`${agr(it.type,'serti')} d’${gemArt(it.gem)} ${GEMS[it.gem].n}`;return s}
 function stars(q){const n=Math.max(1,Math.round(q*5));return '★'.repeat(n)+'☆'.repeat(5-n)}
 /* ---------- équipement de combat ---------- */
 const qf=it=>.85+.3*it.q;
@@ -1639,7 +1643,7 @@ function hireCost(){return Math.round(30*Math.pow(1.9,S.hired))}
 function hire(){
  if(S.apps.length>=appCap()){toast('Plus de lit libre au dortoir.','bad');return}
  const c=hireCost();if(S.gold<c){toast('Pas assez d’or.','bad');return}
- S.gold-=c;S.hired++;
+ S.gold-=c;S.invested+=c;S.hired++;
  S.apps.push({id:S.uid++,n:APP_NAMES[(S.hired-1)%APP_NAMES.length],lvl:0,xp:0,toolId:null,task:'bois',ttype:'dague',ttier:0,prog:0,msg:''});
  toast('Un apprenti rejoint ta forge.','good');sfx('coin');touch()}
 function appInterval(a){return 45/(1+0.2*a.lvl)}
@@ -1686,7 +1690,7 @@ function aiDay(i){
   const val=fv(type,a.tier,rar,q);
   if(!a.best||val>a.best.value){
    a.best={type,tier:a.tier,rar,value:val,name:rar>=3?`${pick(LEGEND_NAMES)} (${TYPES[type].n.toLowerCase()} ${TIERS[a.tier].en})`:`${TYPES[type].n} ${TIERS[a.tier].en}`};
-   if(rar>=3)rumor(`${A.short} a forgé une pièce ${RAR[rar].n.toLowerCase()}e : ${a.best.name} !`)}}
+   if(rar>=3)rumor(`${A.short} a forgé une pièce ${rar===4?'enchantée':'légendaire'} : ${a.best.name} !`)}}
  // investissement dans la forge (améliore vitesse et qualité), le reste de l'or part dans les ouvriers (embauchés en direct)
  const uc=Math.round(100*Math.pow(1.7,a.up||0));
  if((a.up||0)<8&&a.gold>uc+45&&Math.random()<.55){a.gold-=uc;a.invested+=uc;a.up=(a.up||0)+1;rumor(`${A.short} a amélioré sa forge.`)}
@@ -1702,7 +1706,7 @@ function aiDay(i){
  // le copieur imite ce qui marche chez le joueur
  if(A.id==='odon'){
   const top=Object.entries(S.st.byType).sort((x,y)=>y[1]-x[1])[0];
-  if(top&&top[1]>=2&&a.copy!==top[0]){a.copy=top[0];a.focus[top[0]]=(a.focus[top[0]]||0)+3;rumor(`${A.short} a remarqué que tu vends beaucoup de ${TYPES[top[0]].n.toLowerCase()}s. Il s’y met aussi…`)}
+  if(top&&top[1]>=2&&a.copy!==top[0]){a.copy=top[0];a.focus[top[0]]=(a.focus[top[0]]||0)+3;rumor(`${A.short} a remarqué que tu vends beaucoup de ${plur(top[0])}. Il s’y met aussi…`)}
   if(S.rep>a.rep&&Math.random()<.4){a.pm=Math.max(.7,Math.min(a.pm,0.97)*.98)}}
  a.yRev=a.rev;a.ySales=a.sales;
  a.cap=Math.min(a.cap,5)+(S.day>25?1:0);
@@ -1791,7 +1795,7 @@ function step(dt){
   else if(c.state==='haggle'){c.wait+=dt;if(c.wait>75&&!(curH&&curH.c===c))abandonHaggle(c)}
   else if(c.state==='leave'){c.t+=dt;if(c.t>90)c.gone=true}}
  custs=custs.filter(c=>!c.gone);
- if(S.t>=DAY_LEN)endDay()}
+ if(S.t>=DAY_LEN&&!FG)endDay()}
 function sleepNow(){if(S.t<DAY_LEN)S.t=DAY_LEN}
 
 /* ===== Les Quatre Enclumes (3D) — interface ===== */
@@ -2010,7 +2014,7 @@ function renderVillage(){
  const rk=ranking();
  let h=`<div class="sec">Classement des forges <small>jour ${S.day}/${WIN_DAY}</small></div><div class="card"><table><tr><th>#</th><th>Forge</th><th>Fortune</th><th>Renom</th></tr>${rk.map((r,i)=>`<tr class="${r.id<0?'me':''}"><td>${i+1}</td><td>${r.n}</td><td>${fmt(r.w)} po</td><td>${Math.round(r.rep)}</td></tr>`).join('')}</table><div class="hint">Fortune = or + investissements + stock. Le meilleur forgeron au jour ${WIN_DAY} devient Maître Forgeron du village.</div></div>`;
  h+=`<div class="sec">Tes rivaux</div>`;
- h+=S.ai.map((a,i)=>{const A=AIS[i];return `<div class="card" style="border-left:4px solid ${A.c}"><b class="cz">${A.n}</b><div class="small dim">${A.tag}</div><div class="small" style="margin-top:3px">Travaille ${TIERS[a.tier].en} · ${a.helpers} apprenti${a.helpers>1?'s':''} · prix ≈ ${Math.round(a.pm*100)} % du juste prix · hier : ${a.ySales} vente${a.ySales>1?'s':''}${a.best&&a.best.rar>=2?`<br>On dit qu’il détient <i>${a.best.name}</i>.`:''}${a.copy?`<br>Il s’est mis aux ${TYPES[a.copy].n.toLowerCase()}s, comme toi.`:''}</div></div>`}).join('');
+ h+=S.ai.map((a,i)=>{const A=AIS[i];return `<div class="card" style="border-left:4px solid ${A.c}"><b class="cz">${A.n}</b><div class="small dim">${A.tag}</div><div class="small" style="margin-top:3px">Travaille ${TIERS[a.tier].en} · ${a.helpers} apprenti${a.helpers>1?'s':''} · prix ≈ ${Math.round(a.pm*100)} % du juste prix · hier : ${a.ySales} vente${a.ySales>1?'s':''}${a.best&&a.best.rar>=2?`<br>On dit qu’${A.f?'elle':'il'} détient <i>${a.best.name}</i>.`:''}${a.copy?`<br>Il s’est mis aux ${plur(a.copy)}, comme toi.`:''}</div></div>`}).join('');
  h+=`<div class="sec">À la taverne <small>rumeurs</small></div><div class="card">${S.rumors.length?S.rumors.slice(0,10).map(r=>`<div class="small" style="margin-bottom:4px"><span class="dim">J${r.d}</span> ${r.t}</div>`).join(''):'<span class="hint">Rien à raconter pour l’instant.</span>'}</div>`;
  h+=`<div class="sec">Les villageois <small>fidélité : toi · Gérard · Marthe · Odon</small></div><div class="card">${VILL.map((v,i)=>`<div class="row" style="margin-bottom:5px">${av(i,24)}<div class="grow small"><b>${v[0]}</b> <span class="dim">${JOBS[v[1]].n}</span></div><div class="loy">${[0,1,2,3].map(k=>`<i><b style="width:${S.vill[i].loy[k]}%;background:${k?AIS[k-1].c:'#ffc83d'}"></b></i>`).join('')}</div></div>`).join('')}</div>`;
  return h}
@@ -2022,9 +2026,9 @@ function renderMenu(tab){
  else if(tab==='succes')h+=renderSucces();
  else if(tab==='aide')h+=`<h2>Comment jouer</h2><div class="card small">
  <b>Se déplacer</b> : ZQSD / WASD ou flèches (Maj pour courir). Souris pour regarder (clique dans le jeu pour la capturer ; sinon, glisse la souris).<br>
- <b>Frapper</b> : clic gauche (ou touche F). <b>Interagir</b> : E. <b>Sac</b> : I. <b>Menu</b> : Échap ou M.<br>
- <b>Sur téléphone</b> : joystick à gauche, glisse à droite pour regarder, boutons ⚒ (frapper) et ✋ (interagir).</div>
- <div class="card small"><b>Le déroulé</b><br>• Ramasse du bois mort au sol, forge une hache, abats des arbres.<br>• Forge une pioche et brise des rochers à la carrière, puis plus loin dans les mines.<br>• À l’enclume, tu forges <i>toi-même</i> : frappe au bon moment.<br>• Pose tes pièces sur les râteliers, fixe tes prix : parle aux clients qui veulent marchander.<br>• Le panneau des demandes, le four, la table à plans, le dortoir et la vitrine sont dans ta forge.<br>• Dors dans ton lit pour passer directement au lendemain.</div>`;
+ <b>Frapper</b> : clic gauche (ou touche F). <b>Parer</b> (bouclier équipé, dans l’arène) : clic droit ou R. <b>Interagir</b> : E. <b>Sac</b> : I. <b>Menu</b> : Échap ou M.<br>
+ <b>Sur téléphone</b> : joystick à gauche, glisse à droite pour regarder, boutons ⚒ (frapper), ✋ (interagir) et 🛡 (parer). Le son se coupe dans Réglages.</div>
+ <div class="card small"><b>Le déroulé</b><br>• Ramasse du bois mort au sol, forge une hache, abats des arbres.<br>• Forge une pioche et brise des rochers à la carrière, puis plus loin dans les mines.<br>• À l’enclume, tu forges <i>toi-même</i> : frappe au bon moment.<br>• Pose tes pièces sur les râteliers, fixe tes prix : parle aux clients qui veulent marchander.<br>• Le panneau des demandes, le four, la table à plans, le dortoir et la vitrine sont dans ta forge.<br>• Dors dans ton lit pour passer directement au lendemain.<br>• L’<b>arène</b>, à l’est, propose des vagues de morts-vivants : équipe arme et armure dans ton sac, puis sonne la cloche. Le temps s’y arrête pendant le combat.</div>`;
  else h+=`<h2>Réglages</h2><div class="card"><div class="small">Durée d’une journée</div><div class="row wrap" style="margin-top:6px">${[[240,'Courte (4 min)'],[480,'Moyenne (8 min)'],[720,'Longue (12 min)']].map(([v,n])=>`<button class="btn tiny ${DAY_LEN===v?'primary':''}" data-act="setDay" data-v="${v}">${n}</button>`).join('')}</div></div>
  <div class="card"><div class="small">Sensibilité de la souris / du doigt : <b id="sensv">${CFG.sens.toFixed(1)}</b></div><input type="range" id="sens" min="0.3" max="2.5" step="0.1" value="${CFG.sens}"></div>
  <div class="card row"><div class="grow">Son</div><button class="btn tiny" data-act="snd">${snd?'🔊 Activé':'🔈 Coupé'}</button></div>
@@ -2139,7 +2143,7 @@ const A={
  equip:d=>{const it=S.items.find(i=>i.id===+d.v);if(!it)return;const sl=TYPES[it.type].slot;if(!sl){toast('Ça ne s’équipe pas.','bad');return}
   S.items.forEach(o=>{if(o!==it&&o.eq&&TYPES[o.type].slot===sl)o.eq=false});it.eq=true;
   const m={arme:'dans ta main',bouclier:'à ton bras',casque:'sur ta tête',plastron:'sur ton torse',jambieres:'à tes jambes',hache:'à ta ceinture',pioche:'à ta ceinture'}[sl];
-  toast(`${itemTitle(it)} équipé ${m}.`,'good');sfx('tap');touch()},
+  toast(`${itemTitle(it)} ${it.uname?'équipé':agr(it.type,'équipé')} ${m}.`,'good');sfx('tap');touch()},
  unequip:d=>{const it=S.items.find(i=>i.id===+d.v);if(it){it.eq=false;touch()}},
  toDorm:d=>{const it=S.items.find(i=>i.id===+d.v);if(!it||!EQ_TOOLS.includes(it.type))return;it.eq=false;it.loc='dortoir';sfx('tap');toast(`${itemTitle(it)} rangé à l’entrepôt des apprentis.`);touch()},
  fromDorm:d=>{const it=S.items.find(i=>i.id===+d.v);if(!it)return;S.apps.forEach(a=>{if(a.toolId===it.id)a.toolId=null});it.loc='sac';touch()},
@@ -2157,7 +2161,7 @@ const A={
  setDay:d=>{const v=+d.v,f=S.t/DAY_LEN;DAY_LEN=v;S.cfg.dayLen=v;S.t=f*v},
  snd:()=>{snd=!snd;sfx('tap')},
  sleepYes:()=>{closeModal();sleepNow()},
- reset:()=>openModal(`<h2>Recommencer ?</h2><p style="text-align:center">Toute ta progression sera effacée.</p><div class="row" style="justify-content:center"><button class="btn" data-act="close">Annuler</button><button class="btn bad" data-act="resetOK">Tout effacer</button></div>`),
+ reset:()=>{panel=null;setModal(`<h2>Recommencer ?</h2><p style="text-align:center">Toute ta progression sera effacée.</p><div class="row" style="justify-content:center"><button class="btn" data-act="close">Annuler</button><button class="btn bad" data-act="resetOK">Tout effacer</button></div>`)},
  resetOK:()=>{wipeSave();closeModal();closeModal();newGame()},
  cont:()=>{closeModal();continueGame()},
  newg:()=>{closeModal();newGame()}};
@@ -2168,7 +2172,7 @@ document.addEventListener('change',e=>{
  const t=e.target,c=t.dataset&&t.dataset.chg;if(!c)return;
  const a=S.apps.find(x=>x.id===+t.dataset.id);if(!a)return;
  if(c==='appTool'){a.toolId=t.value?+t.value:null;touch()}
- if(c==='appTask'){a.toolId=null;a.task=t.value;a.prog=0;a.msg='';if(t.value==='fondre'&&a.ttier<2)a.ttier=2}
+ if(c==='appTask'){const need=v=>v==='bois'?'hache':wkGather(v)?'pioche':null,tl=appTool(a);if(!tl||need(t.value)!==tl.type)a.toolId=null;a.task=t.value;a.prog=0;a.msg='';if(t.value==='fondre'&&a.ttier<2)a.ttier=2}
  if(c==='appType')a.ttype=t.value;
  if(c==='appTier')a.ttier=+t.value;
  touch();refreshPanel()});
@@ -4192,7 +4196,7 @@ function rvUpdate(dt){
     if(r.t<=0){
      if(r.job==='pick'&&a.units>=PICKU[a.tier]){
       a.units-=PICKU[a.tier];a.tier++;a.pc=0;
-      rumor(`${A.short} a forgé une pioche ${TIERS[a.tier-1].en} : il s’attaque au ${TIERS[a.tier].n.toLowerCase()}.`);
+      rumor(`${A.short} a forgé une pioche ${TIERS[a.tier-1].en} : ${A.f?'elle':'il'} passe ${['au bois','à la pierre','au fer','à l’acier','au mithril','à l’orichalque'][a.tier]}.`);
       if(a.tier>toolTier('pioche')+1){toast(`${A.short} est passé ${['au bois','à la pierre','au fer','à l’acier','au mithril','à l’orichalque'][a.tier]} !`,'bad');sfx('bad')}
       r.act='range sa nouvelle pioche'}
      else if(a.units>=UNITS){a.units-=UNITS;a.cap=(a.cap||0)+1;a.made=(a.made||0)+1;a.pc=(a.pc||0)+1;r.act='range sa pièce'}
@@ -4759,7 +4763,7 @@ function waveDone(){
   setTimeout(()=>{toast(`Butin du Fossoyeur : ${itemTitle(it)} (${RAR[it.rar].n})`,'gold');sfx('magic')},900)}
  showBanner(w%5===0?'FOSSOYEUR VAINCU':'VAGUE TERMINÉE','win');toast(msg,'good');floatRes(got);sfx('coin');setGate(true);save();touch()}
 function arenaCancel(silent){
- for(const z of ARENA.zs)scene3.remove(z.g);ARENA.zs=[];ARENA.queue=[];ARENA.boss=null;
+ for(const z of ARENA.zs)scene3.remove(z.g);ARENA.zs=[];ARENA.queue=[];ARENA.boss=null;if(ARENA.fx){for(const o of ARENA.fx)scene3.remove(o.m);ARENA.fx=[]}
  ARENA.run=false;ARENA.state='idle';setGate(true,true);ARENA.block=0;ARENA.mut=null;ARENA.rage=0;frClearPk();if(!silent)touch()}
 function arenaDie(){
  ARENA.state='dead';ARENA.deadT=0;const st=AS();showBanner('TU ES TOMBÉ…','dead');sfx('thud');shake=.12;
@@ -4833,7 +4837,7 @@ function arenaUpdate(dt,running){
  if(ARENA.run&&ARENA.state==='rest'&&!inArena(P.x,P.z,-2.5)){ARENA.run=false;ARENA.state='idle';ARENA.block=0}
  if(!ARENA.run&&ARENA.state==='idle'){ARENA.block=0;arenaHud(dt);return}
  // garde
- const want=(ARENA.blk||ARENA.tblk||keys.KeyQ)&&ARENA.state==='fight'&&ARENA.stam>0;
+ const want=(ARENA.blk||ARENA.tblk||keys.KeyR)&&ARENA.state==='fight'&&ARENA.stam>0;
  ARENA.block+=((want?1:0)-ARENA.block)*Math.min(1,dt*12);
  // endurance
  if(ARENA.running&&ARENA.state==='fight')ARENA.stam=Math.max(0,ARENA.stam-dt*20);else ARENA.stam=Math.min(100,ARENA.stam+dt*(ARENA.block>.5?7:16));
@@ -5200,8 +5204,8 @@ const ACH=[
  ['riche5000','Fortune de marchand','Avoir 5 000 pièces.',()=>S.gold>=5000,600],
  ['equipe3','Maître d’atelier','Employer 3 apprentis.',()=>S.hired>=3,150],
  ['cmd5','Fournisseur du village','Livrer 5 commandes.',()=>S.tot.delivered>=5,200],
- ['tier3','Métal noble','Posséder un objet de tier 4.',()=>S.items.some(i=>i.tier>=3),250],
- ['tier5','Orichalque !','Posséder un objet de tier 6.',()=>S.items.some(i=>i.tier>=5),800],
+ ['tier3','Métal noble','Posséder un objet en acier.',()=>S.items.some(i=>i.tier>=3),250],
+ ['tier5','Orichalque !','Posséder un objet en orichalque.',()=>S.items.some(i=>i.tier>=5),800],
  ['arene5','Fossoyeur terrassé','Vaincre le boss de la vague 5.',()=>AS().best>=5,250],
  ['arene10','Champion de l’arène','Terminer la vague 10.',()=>AS().best>=10,500],
  ['arene20','Légende vivante','Terminer la vague 20.',()=>AS().best>=20,1500],
@@ -5232,7 +5236,7 @@ function frUpdate(dt,running){
 
 /* ===== Les Quatre Enclumes (3D) — démarrage ===== */
 function syncBuild(){}
-function resetWorldCaches(){if(typeof wkReset==='function'&&DEP.g)wkReset();rackSigs='#';vitSig='#';appSig='#';sceneFx('off');if(typeof arenaCancel==='function')arenaCancel(true);if(FG)endForge();curTarget=null}
+function resetWorldCaches(){if(typeof FR!=='undefined'&&FR){frEndMerch(true);frEndThief(true);frClearPk();FR.day=-1;FR.plan=null;for(const b of FR.bolts)scene3.remove(b.l);FR.bolts=[]}if(typeof wkReset==='function'&&DEP.g)wkReset();rackSigs='#';vitSig='#';appSig='#';sceneFx('off');if(typeof arenaCancel==='function')arenaCancel(true);if(FG)endForge();curTarget=null}
 function newGame(){
  S=newState();custs=[];curH=null;resetWorldCaches();
  startDay();
@@ -5243,9 +5247,9 @@ function continueGame(){
  if(!s){newGame();return}
  S=s;S.paused=false;custs=[];curH=null;S.items.forEach(i=>i.reserved=0);
  if(S.cfg&&S.cfg.dayLen)DAY_LEN=S.cfg.dayLen;
- if(S.t>=DAY_LEN)S.t=DAY_LEN*.5;
  resetWorldCaches();
  P.x=0;P.z=-7.4;P.yaw=Math.PI;P.pitch=-.05;
+ if(S.t>=DAY_LEN){startDay();if(S.pendingFoire){S.pendingFoire=false;openFoire()}}
  touch()}
 
 let lastT=performance.now(),autosave=0;
