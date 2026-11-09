@@ -233,12 +233,14 @@ main.resting { padding-bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
 const LIB = [
   ['squat','Squat barre','quadriceps','legs','barbell',1],
   ['front-squat','Front squat','quadriceps','legs','barbell',1],
-  ['leg-press','Presse à cuisses','quadriceps','legs','machine',1],
+  ['leg-press','Presse à cuisses assise','quadriceps','legs','machine',1],
+  ['abductor','Abducteurs machine','fessiers','legs','machine',0],
+  ['seated-calf','Mollets assis machine','mollets','legs','machine',0],
   ['bulgarian','Squat bulgare','quadriceps','legs','dumbbell',1],
   ['lunge','Fentes haltères','quadriceps','legs','dumbbell',1],
   ['leg-ext','Leg extension','quadriceps','legs','machine',0],
   ['rdl','Soulevé de terre roumain','ischios','legs','barbell',1],
-  ['leg-curl','Leg curl','ischios','legs','machine',0],
+  ['leg-curl','Leg curl allongé','ischios','legs','machine',0],
   ['hip-thrust','Hip thrust','fessiers','legs','barbell',1],
   ['calf','Mollets debout','mollets','legs','machine',0],
   ['deadlift','Soulevé de terre','dos','pull','barbell',1],
@@ -247,6 +249,10 @@ const LIB = [
   ['row','Rowing barre','dos','pull','barbell',1],
   ['db-row','Rowing haltère','dos','pull','dumbbell',1],
   ['cable-row','Tirage horizontal','dos','pull','cable',1],
+  ['low-row','Rowing assis machine','dos','pull','machine',1],
+  ['vert-machine','Tirage vertical machine','dos','pull','machine',1],
+  ['rear-fly','Oiseau machine (rear delt)','épaules','pull','machine',0],
+  ['preacher','Curl pupitre','biceps','pull','machine',0],
   ['face-pull','Face pull','épaules','pull','cable',0],
   ['shrug','Shrugs','trapèzes','pull','dumbbell',0],
   ['curl','Curl barre','biceps','pull','barbell',0],
@@ -256,11 +262,15 @@ const LIB = [
   ['incline-db','Développé incliné haltères','pectoraux','push','dumbbell',1],
   ['dips','Dips','pectoraux','push','bodyweight',1],
   ['fly','Écarté poulie','pectoraux','push','cable',0],
-  ['pec-deck','Pec deck','pectoraux','push','machine',0],
+  ['pec-deck','Pec fly machine','pectoraux','push','machine',0],
+  ['chest-press','Développé pectoraux machine','pectoraux','push','machine',1],
+  ['shoulder-press-m','Développé épaules machine','épaules','push','machine',1],
+  ['cable-lateral','Élévations latérales poulie','épaules','push','cable',0],
+  ['cable-tri-ext','Extension triceps poulie','triceps','push','cable',0],
   ['ohp','Développé militaire','épaules','push','barbell',1],
   ['db-press','Développé épaules haltères','épaules','push','dumbbell',1],
   ['lateral','Élévations latérales','épaules','push','dumbbell',0],
-  ['triceps-push','Extension triceps poulie','triceps','push','cable',0],
+  ['triceps-push','Pushdown triceps','triceps','push','cable',0],
   ['skull','Barre au front','triceps','push','barbell',0],
   ['cable-crunch','Crunch poulie','abdos','core','cable',0],
   ['leg-raise','Relevés de jambes','abdos','core','bodyweight',0],
@@ -268,9 +278,9 @@ const LIB = [
 const LIBMAP = Object.fromEntries(LIB.map(e => [e.id, e]));
 const MUSCLES = ['pectoraux','dos','épaules','quadriceps','ischios','fessiers','biceps','triceps','mollets','abdos','trapèzes'];
 const TEMPLATES = {
-  push: { name: 'Push', sub: 'Pecs · épaules · triceps', ex: ['bench','ohp','incline-db','lateral','triceps-push'] },
-  pull: { name: 'Pull', sub: 'Dos · biceps · arrière d’épaule', ex: ['pullup','row','cable-row','face-pull','curl'] },
-  legs: { name: 'Jambes', sub: 'Quadris · ischios · fessiers', ex: ['squat','rdl','leg-press','leg-curl','calf'] },
+  legs: { name: 'Legs', sub: 'Ta séance : presse, abducteurs, leg ext, leg curl, mollets', ex: ['leg-press','abductor','leg-ext','leg-curl','seated-calf'], mine: true },
+  pull: { name: 'Pull', sub: 'Ta séance : rowing, tirage, curls, oiseau', ex: ['low-row','vert-machine','preacher','hammer','rear-fly'], mine: true },
+  push: { name: 'Push', sub: 'Ta séance : développés, latérales, triceps, pec fly', ex: ['chest-press','cable-lateral','cable-tri-ext','triceps-push','pec-deck','shoulder-press-m'], mine: true },
   full: { name: 'Full body', sub: 'Tout le corps, 5 exos', ex: ['squat','bench','row','ohp','rdl'] },
 };
 const GOALS = { hypertrophie: 'Prise de muscle', force: 'Force', endurance: 'Sèche / endurance' };
@@ -434,11 +444,12 @@ function recommendGroup() {
   S.sessions.forEach(s => { const g = sessionGroup(s); const gs = g === 'full' ? ['push', 'pull', 'legs'] : [g]; gs.forEach(k => { if (k in lastBy) lastBy[k] = s.date; }); });
   let best = 'push', bd = -1;
   for (const g of ['legs', 'push', 'pull']) { const d = lastBy[g] ? dayDiff(lastBy[g]) : 999; if (d > bd) { bd = d; best = g; } }
-  if (!S.sessions.length) return { g: 'full', days: null };
+  if (!S.sessions.length) return { g: 'legs', days: null };
   return { g: best, days: bd === 999 ? null : bd };
 }
 function templateFor(g) {
   const base = TEMPLATES[g].ex;
+  if (TEMPLATES[g].mine) return [...base];
   const freq = {};
   S.sessions.slice(-12).forEach(s => (s.exercises || []).forEach(x => { if (exInfo(x.ex).group === g) freq[x.ex] = (freq[x.ex] || 0) + 1; }));
   const fav = g === 'full' ? [] : Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, 4);
@@ -533,7 +544,7 @@ setInterval(() => {
 const kindClass = k => ({ up: 'k-up', hold: 'k-hold', down: 'k-down', new: 'k-new' }[k] || 'k-new');
 function vStart() {
   const rec = recommendGroup(), T = TEMPLATES[rec.g], ids = templateFor(rec.g);
-  const reason = rec.days === null ? (S.sessions.length ? 'Jamais faite jusqu’ici : c’est le moment.' : 'Pour démarrer ton carnet : une séance complète, charges à calibrer.') : `Dernière séance ${T.name.toLowerCase()} il y a ${rec.days} jour${rec.days > 1 ? 's' : ''} : c’est le groupe le plus reposé.`;
+  const reason = rec.days === null ? (S.sessions.length ? 'Jamais faite jusqu’ici : c’est le moment.' : 'Pour démarrer ton carnet. À la première séance tu notes tes charges, l’app calcule les suivantes.') : `Dernière séance ${T.name.toLowerCase()} il y a ${rec.days} jour${rec.days > 1 ? 's' : ''} : c’est le groupe le plus reposé.`;
   const plan = ids.map(id => { const s = suggest(id), e = exInfo(id); return `<li><b>${esc(e.name)}</b><span class="num">${s.w != null ? `${s.n} × ${s.r} · ${fmt(s.w)} kg` : `${s.n} × ${s.r} · à calibrer`}</span></li>`; }).join('');
   const last = S.sessions[S.sessions.length - 1];
   return `
@@ -549,7 +560,7 @@ function vStart() {
     </div>
   </section>
   <section class="card">
-    <span class="eyebrow">Ou choisis</span>
+    <span class="eyebrow">Tes séances</span>
     <div class="tpl">
       ${Object.entries(TEMPLATES).map(([g, t]) => `<button data-act="start" data-g="${g}"><b>${esc(t.name)}</b><span>${esc(t.sub)}</span></button>`).join('')}
       <button data-act="free"><b>Libre</b><span>Tu ajoutes tes exos un par un</span></button>
